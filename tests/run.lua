@@ -5,6 +5,7 @@ local files = {
   "tests.json_test",
   "tests.extractors_test",
   "tests.logger_test",
+  "tests.adapter_test",
 }
 
 for _, file in ipairs(files) do
