@@ -96,3 +96,25 @@ Civ 5 mod Lua loads files via `include()` or as separate entry points;
 `require` only works in our test environment. Packaging needs a build
 step that concatenates `src/` into one addin file (or rewrites to
 `include()`), while tests keep using modules.
+
+## No fake DLC of our own: piggyback on LEKMOD's InGame.lua
+
+LEKMOD executes its gameplay Lua by overriding `InGame.lua` (generated
+by its `ui_check.bat`) with `ContextPtr:LoadNewContext("<file>")` lines,
+and its `.Civ5Pkg` already mounts the `Lua/` directory into the VFS.
+We install by copying the built `CivNarrativeLogger.lua` there and
+appending one `LoadNewContext` line - only on machines that should log.
+Why not our own DLC: multiplayer requires identical DLC lists on every
+machine, so a logger DLC would force all players to install it; and a
+separate DLC would have to override some always-loaded UI file, racing
+LEKMOD/EUI for it. A UI context that only reads state and prints is
+local, so machines without it stay perfectly in sync. Costs: LEKMOD
+updates/ui_check wipe the line (re-run install), and whether InGame.lua
+loads under pitboss mode is a smoke-test question - if it does not, we
+hook a context that does.
+
+## The built dist/ file is committed
+
+Windows test machines get no Lua toolchain; the generated
+`dist/CivNarrativeLogger.lua` is committed so installing there is a
+file copy. Rebuild with `luajit tools/build.lua` after changing src/.
