@@ -47,6 +47,12 @@ function M.assert_nil(actual)
   if actual ~= nil then fail(nil, actual) end
 end
 
+function M.assert_match(fragment, s)
+  if type(s) ~= "string" or not s:find(fragment, 1, true) then
+    fail(fragment, s)
+  end
+end
+
 function M.run()
   for _, t in ipairs(M.tests) do
     local ok, err = pcall(t.fn)

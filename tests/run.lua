@@ -4,6 +4,7 @@ local t = require("tests.test_helper")
 local files = {
   "tests.json_test",
   "tests.extractors_test",
+  "tests.logger_test",
 }
 
 for _, file in ipairs(files) do
