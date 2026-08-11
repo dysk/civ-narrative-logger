@@ -193,6 +193,15 @@ function M.CircumnavigatedGlobe(civ, teamId)
   }
 end
 
+function M.PlayerDoTurn(civ, playerId)
+  local record = civ.playerStats(playerId)
+  if not record then return nil end
+  record.event = "snapshot"
+  record.turn = civ.turn()
+  record.civ = civ.civName(playerId)
+  return record
+end
+
 function M.NaturalWonderDiscovered(civ, teamId, featureId, x, y, first)
   return {
     event = "natural_wonder_discovered",

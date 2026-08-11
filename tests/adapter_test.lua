@@ -4,8 +4,21 @@ local adapter = require("src.adapter")
 local function fakePlayer(spec)
   return {
     IsAlive = function() return spec.alive ~= false end,
+    IsMinorCiv = function() return spec.minor == true end,
+    IsBarbarian = function() return spec.barbarian == true end,
     GetTeam = function() return spec.team or 0 end,
     GetCivilizationShortDescription = function() return spec.civ end,
+    GetScore = function() return spec.score end,
+    GetGold = function() return spec.gold end,
+    CalculateGoldRateTimes100 = function() return spec.goldRate100 end,
+    GetScienceTimes100 = function() return spec.science100 end,
+    GetTotalJONSCulturePerTurn = function() return spec.culture end,
+    GetTotalFaithPerTurn = function() return spec.faith end,
+    GetExcessHappiness = function() return spec.happiness end,
+    GetNumCities = function() return spec.cities end,
+    GetTotalPopulation = function() return spec.population end,
+    GetMilitaryMight = function() return spec.might end,
+    GetNumMilitaryUnits = function() return spec.militaryUnits end,
     GetCityByID = function(_, id)
       if id == spec.cityId then
         return { GetName = function() return spec.cityName end }
@@ -32,9 +45,21 @@ local globals = {
       civ = "Poland", team = 0,
       cityId = 3, cityName = "Warsaw",
       unitId = 9, unitTypeId = 5,
+      score = 1200, gold = 340, goldRate100 = 1250, science100 = 4800,
+      culture = 30, faith = 10, happiness = 7, cities = 5,
+      population = 41, might = 5600, militaryUnits = 14,
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
+    [3] = fakePlayer({ civ = "Venice", minor = true }),
+    [4] = fakePlayer({ civ = "Barbarians", barbarian = true }),
+  },
+  Teams = {
+    [0] = {
+      GetTeamTechs = function()
+        return { GetNumTechsKnown = function() return 24 end }
+      end,
+    },
   },
   Map = {
     GetPlot = function(x, y)
@@ -142,4 +167,33 @@ end)
 
 t.test("unitTypeName resolves a unit type id to its Type string", function()
   t.assert_equal("UNIT_SETTLER", civ.unitTypeName(5))
+end)
+
+t.test("playerStats reads the full stat line of a living major civ", function()
+  t.assert_deep_equal({
+    score = 1200,
+    gold = 340,
+    gold_per_turn = 12.5,
+    science = 48,
+    culture = 30,
+    faith = 10,
+    happiness = 7,
+    cities = 5,
+    population = 41,
+    military_might = 5600,
+    military_units = 14,
+    techs = 24,
+  }, civ.playerStats(0))
+end)
+
+t.test("playerStats is nil for city-states", function()
+  t.assert_nil(civ.playerStats(3))
+end)
+
+t.test("playerStats is nil for barbarians", function()
+  t.assert_nil(civ.playerStats(4))
+end)
+
+t.test("playerStats is nil for dead players", function()
+  t.assert_nil(civ.playerStats(2))
 end)

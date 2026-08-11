@@ -85,6 +85,27 @@ function M.new(g)
     return typeOf(g.GameInfo.Units[unitTypeId])
   end
 
+  function civ.playerStats(playerId)
+    local p = g.Players[playerId]
+    if not p or not p:IsAlive() or p:IsMinorCiv() or p:IsBarbarian() then
+      return nil
+    end
+    return {
+      score = p:GetScore(),
+      gold = p:GetGold(),
+      gold_per_turn = p:CalculateGoldRateTimes100() / 100,
+      science = p:GetScienceTimes100() / 100,
+      culture = p:GetTotalJONSCulturePerTurn(),
+      faith = p:GetTotalFaithPerTurn(),
+      happiness = p:GetExcessHappiness(),
+      cities = p:GetNumCities(),
+      population = p:GetTotalPopulation(),
+      military_might = p:GetMilitaryMight(),
+      military_units = p:GetNumMilitaryUnits(),
+      techs = g.Teams[p:GetTeam()]:GetTeamTechs():GetNumTechsKnown(),
+    }
+  end
+
   return civ
 end
 

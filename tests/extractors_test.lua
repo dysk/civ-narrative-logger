@@ -285,3 +285,22 @@ t.test("NaturalWonderDiscovered becomes a natural_wonder_discovered record", fun
     first = true,
   }, extractors.NaturalWonderDiscovered(civ, 1, 21, 5, 6, true))
 end)
+
+civ.playerStats = function(playerId)
+  return playerId == 0 and { score = 1200, gold = 340 } or nil
+end
+
+-- DLL: PlayerDoTurn(playerId)
+t.test("PlayerDoTurn becomes a snapshot record with the player stats", function()
+  t.assert_deep_equal({
+    event = "snapshot",
+    turn = 142,
+    civ = "Poland",
+    score = 1200,
+    gold = 340,
+  }, extractors.PlayerDoTurn(civ, 0))
+end)
+
+t.test("PlayerDoTurn skips players without stats", function()
+  t.assert_nil(extractors.PlayerDoTurn(civ, 1))
+end)
