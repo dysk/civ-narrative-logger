@@ -92,4 +92,118 @@ function M.CityCreated(civ, ownerId, cityId, projectId)
   }
 end
 
+local function beliefList(civ, ...)
+  local beliefs = {}
+  for _, beliefId in ipairs({ ... }) do
+    local belief = civ.beliefType(beliefId)
+    if belief then table.insert(beliefs, belief) end
+  end
+  return beliefs
+end
+
+function M.MakePeace(civ, teamA, teamB)
+  return {
+    event = "peace_made",
+    turn = civ.turn(),
+    team_a = teamA,
+    team_a_civs = civ.teamCivNames(teamA),
+    team_b = teamB,
+    team_b_civs = civ.teamCivNames(teamB),
+  }
+end
+
+function M.PantheonFounded(civ, playerId, cityId, _, beliefId)
+  return {
+    event = "pantheon_founded",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    city = civ.cityName(playerId, cityId),
+    belief = civ.beliefType(beliefId),
+  }
+end
+
+function M.ReligionFounded(civ, playerId, holyCityId, religionId, ...)
+  return {
+    event = "religion_founded",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    holy_city = civ.cityName(playerId, holyCityId),
+    religion = civ.religionName(religionId),
+    beliefs = beliefList(civ, ...),
+  }
+end
+
+function M.ReligionEnhanced(civ, playerId, religionId, ...)
+  return {
+    event = "religion_enhanced",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    religion = civ.religionName(religionId),
+    beliefs = beliefList(civ, ...),
+  }
+end
+
+function M.GreatPersonExpended(civ, playerId, unitTypeId)
+  return {
+    event = "great_person_expended",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    great_person = civ.unitTypeName(unitTypeId),
+  }
+end
+
+function M.TeamSetEra(civ, teamId, eraId)
+  return {
+    event = "era_entered",
+    turn = civ.turn(),
+    team = teamId,
+    civs = civ.teamCivNames(teamId),
+    era = civ.eraType(eraId),
+  }
+end
+
+function M.NuclearDetonation(civ, playerId, x, y, war, bystanderWar)
+  return {
+    event = "nuclear_detonation",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    x = x,
+    y = y,
+    city = civ.cityNameAt(x, y),
+    war = war,
+    bystander_war = bystanderWar,
+  }
+end
+
+function M.PlayerAdoptPolicy(civ, playerId, policyId)
+  return {
+    event = "policy_adopted",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    policy = civ.policyType(policyId),
+  }
+end
+
+function M.CircumnavigatedGlobe(civ, teamId)
+  return {
+    event = "globe_circumnavigated",
+    turn = civ.turn(),
+    team = teamId,
+    civs = civ.teamCivNames(teamId),
+  }
+end
+
+function M.NaturalWonderDiscovered(civ, teamId, featureId, x, y, first)
+  return {
+    event = "natural_wonder_discovered",
+    turn = civ.turn(),
+    team = teamId,
+    civs = civ.teamCivNames(teamId),
+    wonder = civ.featureType(featureId),
+    x = x,
+    y = y,
+    first = first,
+  }
+end
+
 return M

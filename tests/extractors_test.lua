@@ -29,6 +29,28 @@ local civ = {
   projectType = function(projectId)
     return projectId == 2 and "PROJECT_APOLLO_PROGRAM" or nil
   end,
+  religionName = function(religionId)
+    return religionId == 4 and "Buddhism" or nil
+  end,
+  beliefType = function(beliefId)
+    return ({
+      [3] = "BELIEF_GOD_OF_WAR",
+      [10] = "BELIEF_TITHE",
+      [11] = "BELIEF_PAGODAS",
+    })[beliefId]
+  end,
+  eraType = function(eraId)
+    return eraId == 2 and "ERA_CLASSICAL" or nil
+  end,
+  policyType = function(policyId)
+    return policyId == 6 and "POLICY_LIBERTY" or nil
+  end,
+  featureType = function(featureId)
+    return featureId == 21 and "FEATURE_EL_DORADO" or nil
+  end,
+  unitTypeName = function(unitTypeId)
+    return unitTypeId == 30 and "UNIT_GREAT_SCIENTIST" or nil
+  end,
 }
 
 -- DLL: CityCaptureComplete(oldOwner, isCapital, x, y, newOwner,
@@ -144,4 +166,122 @@ t.test("CityTrained records faith purchases", function()
     unit = "UNIT_SETTLER",
     bought_with = "faith",
   }, extractors.CityTrained(civ, 0, 3, 9, false, true))
+end)
+
+-- DLL: MakePeace(teamId, otherTeamId)
+t.test("MakePeace becomes a peace_made record", function()
+  t.assert_deep_equal({
+    event = "peace_made",
+    turn = 142,
+    team_a = 0,
+    team_a_civs = { "Poland" },
+    team_b = 1,
+    team_b_civs = { "Rome" },
+  }, extractors.MakePeace(civ, 0, 1))
+end)
+
+-- DLL: PantheonFounded(playerId, capitalCityId, religionId, beliefId)
+-- religionId is always RELIGION_PANTHEON (-1)
+t.test("PantheonFounded becomes a pantheon_founded record", function()
+  t.assert_deep_equal({
+    event = "pantheon_founded",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    belief = "BELIEF_GOD_OF_WAR",
+  }, extractors.PantheonFounded(civ, 0, 3, -1, 3))
+end)
+
+-- DLL: ReligionFounded(playerId, holyCityId, religionId,
+--   pantheonBelief, belief1, belief2, belief3, belief4)
+-- unused belief slots arrive as -1 (NO_BELIEF)
+t.test("ReligionFounded becomes a religion_founded record", function()
+  t.assert_deep_equal({
+    event = "religion_founded",
+    turn = 142,
+    civ = "Poland",
+    holy_city = "Warsaw",
+    religion = "Buddhism",
+    beliefs = { "BELIEF_GOD_OF_WAR", "BELIEF_TITHE", "BELIEF_PAGODAS" },
+  }, extractors.ReligionFounded(civ, 0, 3, 4, 3, 10, 11, -1, -1))
+end)
+
+-- DLL: ReligionEnhanced(playerId, religionId, belief1, belief2)
+t.test("ReligionEnhanced becomes a religion_enhanced record", function()
+  t.assert_deep_equal({
+    event = "religion_enhanced",
+    turn = 142,
+    civ = "Poland",
+    religion = "Buddhism",
+    beliefs = { "BELIEF_TITHE", "BELIEF_PAGODAS" },
+  }, extractors.ReligionEnhanced(civ, 0, 4, 10, 11))
+end)
+
+-- DLL: GreatPersonExpended(playerId, unitTypeId) -- type, not instance
+t.test("GreatPersonExpended becomes a great_person_expended record", function()
+  t.assert_deep_equal({
+    event = "great_person_expended",
+    turn = 142,
+    civ = "Poland",
+    great_person = "UNIT_GREAT_SCIENTIST",
+  }, extractors.GreatPersonExpended(civ, 0, 30))
+end)
+
+-- DLL: TeamSetEra(teamId, eraId)
+t.test("TeamSetEra becomes an era_entered record", function()
+  t.assert_deep_equal({
+    event = "era_entered",
+    turn = 142,
+    team = 1,
+    civs = { "Rome" },
+    era = "ERA_CLASSICAL",
+  }, extractors.TeamSetEra(civ, 1, 2))
+end)
+
+-- DLL: NuclearDetonation(attackerPlayerId, x, y, war, bystanderWar)
+t.test("NuclearDetonation becomes a nuclear_detonation record", function()
+  t.assert_deep_equal({
+    event = "nuclear_detonation",
+    turn = 142,
+    civ = "Poland",
+    x = 10,
+    y = 20,
+    city = "Warsaw",
+    war = true,
+    bystander_war = false,
+  }, extractors.NuclearDetonation(civ, 0, 10, 20, true, false))
+end)
+
+-- DLL: PlayerAdoptPolicy(playerId, policyId)
+t.test("PlayerAdoptPolicy becomes a policy_adopted record", function()
+  t.assert_deep_equal({
+    event = "policy_adopted",
+    turn = 142,
+    civ = "Poland",
+    policy = "POLICY_LIBERTY",
+  }, extractors.PlayerAdoptPolicy(civ, 0, 6))
+end)
+
+-- DLL: CircumnavigatedGlobe(teamId)
+t.test("CircumnavigatedGlobe becomes a globe_circumnavigated record", function()
+  t.assert_deep_equal({
+    event = "globe_circumnavigated",
+    turn = 142,
+    team = 1,
+    civs = { "Rome" },
+  }, extractors.CircumnavigatedGlobe(civ, 1))
+end)
+
+-- DLL: NaturalWonderDiscovered(teamId, featureId, x, y, first)
+t.test("NaturalWonderDiscovered becomes a natural_wonder_discovered record", function()
+  t.assert_deep_equal({
+    event = "natural_wonder_discovered",
+    turn = 142,
+    team = 1,
+    civs = { "Rome" },
+    wonder = "FEATURE_EL_DORADO",
+    x = 5,
+    y = 6,
+    first = true,
+  }, extractors.NaturalWonderDiscovered(civ, 1, 21, 5, 6, true))
 end)

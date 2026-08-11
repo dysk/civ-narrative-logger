@@ -57,6 +57,34 @@ function M.new(g)
     return g.GameInfo.Projects[projectId].Type
   end
 
+  function civ.religionName(religionId)
+    return g.Game.GetReligionName(religionId)
+  end
+
+  local function typeOf(row)
+    return row and row.Type or nil
+  end
+
+  function civ.beliefType(beliefId)
+    return typeOf(g.GameInfo.Beliefs[beliefId])
+  end
+
+  function civ.eraType(eraId)
+    return typeOf(g.GameInfo.Eras[eraId])
+  end
+
+  function civ.policyType(policyId)
+    return typeOf(g.GameInfo.Policies[policyId])
+  end
+
+  function civ.featureType(featureId)
+    return typeOf(g.GameInfo.Features[featureId])
+  end
+
+  function civ.unitTypeName(unitTypeId)
+    return typeOf(g.GameInfo.Units[unitTypeId])
+  end
+
   return civ
 end
 

@@ -20,7 +20,12 @@ local function fakePlayer(spec)
 end
 
 local globals = {
-  Game = { GetGameTurn = function() return 142 end },
+  Game = {
+    GetGameTurn = function() return 142 end,
+    GetReligionName = function(religionId)
+      return religionId == 4 and "Buddhism" or nil
+    end,
+  },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
     [0] = fakePlayer({
@@ -54,6 +59,10 @@ local globals = {
       BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1 },
       BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1 },
     },
+    Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
+    Eras = { [2] = { Type = "ERA_CLASSICAL" } },
+    Policies = { [6] = { Type = "POLICY_LIBERTY" } },
+    Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
   },
 }
 
@@ -105,4 +114,32 @@ end)
 
 t.test("projectType resolves a project id to its Type string", function()
   t.assert_equal("PROJECT_APOLLO_PROGRAM", civ.projectType(2))
+end)
+
+t.test("religionName uses the in-game (possibly renamed) name", function()
+  t.assert_equal("Buddhism", civ.religionName(4))
+end)
+
+t.test("beliefType resolves a belief id to its Type string", function()
+  t.assert_equal("BELIEF_TITHE", civ.beliefType(10))
+end)
+
+t.test("beliefType is nil for NO_BELIEF (-1)", function()
+  t.assert_nil(civ.beliefType(-1))
+end)
+
+t.test("eraType resolves an era id to its Type string", function()
+  t.assert_equal("ERA_CLASSICAL", civ.eraType(2))
+end)
+
+t.test("policyType resolves a policy id to its Type string", function()
+  t.assert_equal("POLICY_LIBERTY", civ.policyType(6))
+end)
+
+t.test("featureType resolves a feature id to its Type string", function()
+  t.assert_equal("FEATURE_EL_DORADO", civ.featureType(21))
+end)
+
+t.test("unitTypeName resolves a unit type id to its Type string", function()
+  t.assert_equal("UNIT_SETTLER", civ.unitTypeName(5))
 end)
