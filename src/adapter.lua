@@ -106,6 +106,36 @@ function M.new(g)
     }
   end
 
+  function civ.gameSettings()
+    return {
+      map_script = g.PreGame.GetMapScript(),
+      map_size = typeOf(g.GameInfo.Worlds[g.Map.GetWorldSize()]),
+      game_speed = typeOf(g.GameInfo.GameSpeeds[g.Game.GetGameSpeedType()]),
+      max_turns = g.Game.GetMaxTurns(),
+      start_era = civ.eraType(g.Game.GetStartEra()),
+    }
+  end
+
+  local function rosterEntry(p)
+    return {
+      civ = p:GetCivilizationShortDescription(),
+      name = p:GetName(),
+      human = p:IsHuman(),
+      handicap = typeOf(g.GameInfo.HandicapInfos[p:GetHandicapType()]),
+    }
+  end
+
+  function civ.playerRoster()
+    local roster = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if p and p:IsAlive() and not p:IsMinorCiv() and not p:IsBarbarian() then
+        table.insert(roster, rosterEntry(p))
+      end
+    end
+    return roster
+  end
+
   return civ
 end
 

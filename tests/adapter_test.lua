@@ -8,6 +8,9 @@ local function fakePlayer(spec)
     IsBarbarian = function() return spec.barbarian == true end,
     GetTeam = function() return spec.team or 0 end,
     GetCivilizationShortDescription = function() return spec.civ end,
+    GetName = function() return spec.name end,
+    IsHuman = function() return spec.human == true end,
+    GetHandicapType = function() return spec.handicap end,
     GetScore = function() return spec.score end,
     GetGold = function() return spec.gold end,
     CalculateGoldRateTimes100 = function() return spec.goldRate100 end,
@@ -38,18 +41,25 @@ local globals = {
     GetReligionName = function(religionId)
       return religionId == 4 and "Buddhism" or nil
     end,
+    GetGameSpeedType = function() return 1 end,
+    GetMaxTurns = function() return 330 end,
+    GetStartEra = function() return 2 end,
+  },
+  PreGame = {
+    GetMapScript = function() return "Assets/Maps/Lekmap.lua" end,
   },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
     [0] = fakePlayer({
       civ = "Poland", team = 0,
+      name = "dysk", human = true, handicap = 5,
       cityId = 3, cityName = "Warsaw",
       unitId = 9, unitTypeId = 5,
       score = 1200, gold = 340, goldRate100 = 1250, science100 = 4800,
       culture = 30, faith = 10, happiness = 7, cities = 5,
       population = 41, might = 5600, militaryUnits = 14,
     }),
-    [1] = fakePlayer({ civ = "Rome", team = 1 }),
+    [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
     [3] = fakePlayer({ civ = "Venice", minor = true }),
     [4] = fakePlayer({ civ = "Barbarians", barbarian = true }),
@@ -62,6 +72,7 @@ local globals = {
     },
   },
   Map = {
+    GetWorldSize = function() return 1 end,
     GetPlot = function(x, y)
       return {
         GetPlotCity = function()
@@ -88,6 +99,9 @@ local globals = {
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
     Policies = { [6] = { Type = "POLICY_LIBERTY" } },
     Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
+    Worlds = { [1] = { Type = "WORLDSIZE_STANDARD" } },
+    GameSpeeds = { [1] = { Type = "GAMESPEED_QUICK" } },
+    HandicapInfos = { [5] = { Type = "HANDICAP_KING" } },
   },
 }
 
@@ -196,4 +210,21 @@ end)
 
 t.test("playerStats is nil for dead players", function()
   t.assert_nil(civ.playerStats(2))
+end)
+
+t.test("gameSettings reads map, size, speed, turn limit and start era", function()
+  t.assert_deep_equal({
+    map_script = "Assets/Maps/Lekmap.lua",
+    map_size = "WORLDSIZE_STANDARD",
+    game_speed = "GAMESPEED_QUICK",
+    max_turns = 330,
+    start_era = "ERA_CLASSICAL",
+  }, civ.gameSettings())
+end)
+
+t.test("playerRoster lists living majors with identity and handicap", function()
+  t.assert_deep_equal({
+    { civ = "Poland", name = "dysk", human = true, handicap = "HANDICAP_KING" },
+    { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
+  }, civ.playerRoster())
 end)

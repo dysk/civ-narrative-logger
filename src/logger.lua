@@ -18,10 +18,18 @@ local function handler(deps, name, extractor)
   end
 end
 
+-- Extractors named in UpperCamelCase are GameEvents hooks; lowercase
+-- names are helpers emitted explicitly (see docs/design-decisions.md).
 function M.attach(deps)
   for name, extractor in pairs(deps.extractors) do
-    deps.events[name].Add(handler(deps, name, extractor))
+    if name:match("^%u") then
+      deps.events[name].Add(handler(deps, name, extractor))
+    end
   end
+end
+
+function M.emit(deps, name, extractor, ...)
+  handler(deps, name, extractor)(...)
 end
 
 return M

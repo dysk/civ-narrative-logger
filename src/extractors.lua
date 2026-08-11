@@ -215,4 +215,12 @@ function M.NaturalWonderDiscovered(civ, teamId, featureId, x, y, first)
   }
 end
 
+function M.sessionStarted(civ)
+  local record = civ.gameSettings()
+  record.event = "session_started"
+  record.turn = civ.turn()
+  record.players = civ.playerRoster()
+  return record
+end
+
 return M

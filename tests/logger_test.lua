@@ -79,3 +79,28 @@ t.test("an extractor error is logged instead of raised", function()
   t.assert_match('"event":"logger_error"', lines[1])
   t.assert_match('"hook":"Broken"', lines[1])
 end)
+
+t.test("attach skips lowercase-named extractors, they are not hooks", function()
+  local events, handlers = fakeEvents()
+  logger.attach({
+    events = events,
+    extractors = {
+      DeclareWar = function() end,
+      sessionStarted = function() end,
+    },
+    civ = civ,
+    sink = function() end,
+  })
+  local names = {}
+  for name in pairs(handlers) do table.insert(names, name) end
+  t.assert_deep_equal({ "DeclareWar" }, names)
+end)
+
+t.test("emit runs one extractor immediately through the safe path", function()
+  local lines, sink = captureSink()
+  local deps = { civ = civ, sink = sink }
+  logger.emit(deps, "sessionStarted", function(c)
+    return { event = "session_started", turn = c.turn() }
+  end)
+  t.assert_deep_equal({ '{"event":"session_started","turn":42}' }, lines)
+end)

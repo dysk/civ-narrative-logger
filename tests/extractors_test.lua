@@ -304,3 +304,28 @@ end)
 t.test("PlayerDoTurn skips players without stats", function()
   t.assert_nil(extractors.PlayerDoTurn(civ, 1))
 end)
+
+civ.gameSettings = function()
+  return { map_script = "Lekmap.lua", map_size = "WORLDSIZE_STANDARD" }
+end
+civ.playerRoster = function()
+  return {
+    { civ = "Poland", name = "dysk", human = true, handicap = "HANDICAP_KING" },
+    { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
+  }
+end
+
+-- Not a GameEvents hook: emitted once whenever the logger attaches
+-- (game start, reload, pitboss restart).
+t.test("sessionStarted merges settings, roster and turn", function()
+  t.assert_deep_equal({
+    event = "session_started",
+    turn = 142,
+    map_script = "Lekmap.lua",
+    map_size = "WORLDSIZE_STANDARD",
+    players = {
+      { civ = "Poland", name = "dysk", human = true, handicap = "HANDICAP_KING" },
+      { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
+    },
+  }, extractors.sessionStarted(civ))
+end)
