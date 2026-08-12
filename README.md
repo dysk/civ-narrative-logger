@@ -16,7 +16,7 @@ install and enablement steps.
 
 ## Status
 
-Complete and tested: event extractors (18 record types), JSON
+Complete and tested: event extractors (44 hooks, 45 record types), JSON
 encoder, error-safe logger wiring, the Civ 5 API adapter, the gated
 entry point, the single-file build (`luajit tools/build.lua`, output
 committed in `dist/`), the LEKMOD install path and the Lua.log →

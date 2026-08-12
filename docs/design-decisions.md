@@ -118,3 +118,18 @@ hook a context that does.
 Windows test machines get no Lua toolchain; the generated
 `dist/CivNarrativeLogger.lua` is committed so installing there is a
 file copy. Rebuild with `luajit tools/build.lua` after changing src/.
+
+## Hooks we deliberately do not subscribe to
+
+Beyond the blanket rule against decision-query hooks, four eligible-
+looking hooks stay out, checked against the Lekmod DLL call sites:
+
+- `GetReligionToFound`, `GetReligionToSpread`,
+  `GetFounderBenefitsReligion` - CallAccumulator queries; a
+  handler's return value feeds the game's religion decisions.
+- `GameCoreTestVictory` - a plain hook, but it pushes no arguments
+  and fires every game-core update; there is nothing to record.
+- `UnitGetSpecialExploreTarget` - fires inside the AI explorer's
+  move selection loop; pure volume with no narrative content.
+- `PlayerHappinessChanged` - safe but redundant: it pushes only the
+  player id, and every per-turn snapshot already carries happiness.
