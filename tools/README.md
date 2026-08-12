@@ -26,6 +26,23 @@ Installing is half the story: logging stays off until the flag below
 is also present, and the game's `config.ini` needs `LoggingEnabled = 1`
 so `print` output reaches `Logs/Lua.log`.
 
+# Extracting the events from Lua.log
+
+After a session, turn the game's `Logs/Lua.log` into one JSON record
+per line (only this logger's lines survive; timestamps, other mods'
+output and Windows line endings are stripped):
+
+```sh
+luajit tools/parser.lua path/to/Lua.log > events.jsonl
+```
+
+Without an argument it reads stdin, so it also works in a pipe. The
+log folder sits next to `ModUserData` (see the table below) under
+`Logs/`. Note that the game truncates Lua.log on every launch — copy
+it out before restarting. City-states and barbarians appear in
+`tech_researched` records too (barbarians as team 63 with empty
+`civs`); filter downstream if unwanted.
+
 # Enabling logging on a machine
 
 Logging is off by default everywhere. To enable it on a machine (the

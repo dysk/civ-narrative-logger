@@ -19,9 +19,10 @@ install and enablement steps.
 Complete and tested: event extractors (18 record types), JSON
 encoder, error-safe logger wiring, the Civ 5 API adapter, the gated
 entry point, the single-file build (`luajit tools/build.lua`, output
-committed in `dist/`) and the LEKMOD install path. Not yet built: the
-server-side Lua.log → events.jsonl parser, and the first in-game
-smoke test.
+committed in `dist/`), the LEKMOD install path and the Lua.log →
+events.jsonl parser (`luajit tools/parser.lua`). Smoke-tested in
+single player on Windows and in multiplayer on a linux-wine pitboss
+server.
 
 ## Running the tests
 
@@ -47,7 +48,7 @@ the game globals as a parameter and is tested against fakes.
 | `src/json.lua` | minimal deterministic JSON encoder (sandbox has none) |
 | `src/main.lua` | entry point: opt-in gate, CIVLOG| print-sink, wiring |
 | `tests/` | test suite + ~70-line harness (`tests/run.lua`) |
-| `tools/` | build script, LEKMOD installer, enable-flag file + install docs |
+| `tools/` | build script, LEKMOD installer, Lua.log parser, enable-flag file + install docs |
 | `dist/` | the generated game-loadable file (committed; rebuild after src changes) |
 | `docs/design-decisions.md` | every non-obvious choice and its why |
 | `docs/lekmod-gameevents.md` | authoritative hook list, extracted from the Lekmod DLL source |
