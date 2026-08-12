@@ -5,7 +5,7 @@ local extractors = require("src.extractors")
 local civ = {
   turn = function() return 142 end,
   civName = function(playerId)
-    return ({ [0] = "Poland", [1] = "Rome" })[playerId]
+    return ({ [0] = "Poland", [1] = "Rome", [3] = "Geneva" })[playerId]
   end,
   teamCivNames = function(teamId)
     return ({ [0] = { "Poland" }, [1] = { "Rome" } })[teamId]
@@ -519,4 +519,117 @@ t.test("RebaseTo becomes a unit_rebased record", function()
     x = 10,
     y = 20,
   }, extractors.RebaseTo(civ, 0, 9, 10, 20))
+end)
+
+-- DLL: TeamMeet(metTeamId, meetingTeamId) -- fires once per pair,
+--   both directions are marked met before the hook
+t.test("TeamMeet becomes a teams_met record", function()
+  t.assert_deep_equal({
+    event = "teams_met",
+    turn = 142,
+    team_a = 1,
+    team_a_civs = { "Rome" },
+    team_b = 0,
+    team_b_civs = { "Poland" },
+  }, extractors.TeamMeet(civ, 1, 0))
+end)
+
+-- DLL: SetAlly(minorPlayerId, oldAllyId, newAllyId) -- NO_PLAYER is -1
+t.test("SetAlly becomes a city_state_ally_changed record", function()
+  t.assert_deep_equal({
+    event = "city_state_ally_changed",
+    turn = 142,
+    city_state = "Geneva",
+    old_ally = "Poland",
+    new_ally = "Rome",
+  }, extractors.SetAlly(civ, 3, 0, 1))
+end)
+
+t.test("SetAlly omits absent allies", function()
+  t.assert_deep_equal({
+    event = "city_state_ally_changed",
+    turn = 142,
+    city_state = "Geneva",
+    new_ally = "Poland",
+  }, extractors.SetAlly(civ, 3, -1, 0))
+end)
+
+-- DLL: MinorAlliesChanged(minorPlayerId, playerId, bAdd,
+--   oldFriendship, newFriendship)
+t.test("MinorAlliesChanged becomes a city_state_alliance_changed record", function()
+  t.assert_deep_equal({
+    event = "city_state_alliance_changed",
+    turn = 142,
+    city_state = "Geneva",
+    civ = "Poland",
+    allied = true,
+    old_friendship = 55,
+    new_friendship = 62,
+  }, extractors.MinorAlliesChanged(civ, 3, 0, true, 55, 62))
+end)
+
+-- DLL: MinorFriendsChanged(minorPlayerId, playerId, bAdd,
+--   oldFriendship, newFriendship)
+t.test("MinorFriendsChanged becomes a city_state_friendship_changed record", function()
+  t.assert_deep_equal({
+    event = "city_state_friendship_changed",
+    turn = 142,
+    city_state = "Geneva",
+    civ = "Poland",
+    friends = false,
+    old_friendship = 32,
+    new_friendship = 28,
+  }, extractors.MinorFriendsChanged(civ, 3, 0, false, 32, 28))
+end)
+
+-- DLL: UiDiploEvent(eventTypeId, aiPlayerId, arg1, arg2)
+--   -- FromUIDiploEventTypes enum, kept raw
+t.test("UiDiploEvent becomes a diplo_event record", function()
+  t.assert_deep_equal({
+    event = "diplo_event",
+    turn = 142,
+    type = 5,
+    civ = "Rome",
+    arg1 = 3,
+    arg2 = 0,
+  }, extractors.UiDiploEvent(civ, 5, 1, 3, 0))
+end)
+
+-- DLL: MPVotingSystemVote(proposalId, voterPlayerId, bVote)
+t.test("MPVotingSystemVote becomes an mp_vote record", function()
+  t.assert_deep_equal({
+    event = "mp_vote",
+    turn = 142,
+    proposal = 2,
+    civ = "Poland",
+    vote = true,
+  }, extractors.MPVotingSystemVote(civ, 2, 0, true))
+end)
+
+-- DLL: MPVotingSystemProposalResult(proposalId, expirationCounter,
+--   ownerPlayerId, subjectPlayerId, typeId, statusId)
+--   -- type/status enums are DLL-internal, kept raw
+t.test("MPVotingSystemProposalResult becomes an mp_proposal_result record", function()
+  t.assert_deep_equal({
+    event = "mp_proposal_result",
+    turn = 142,
+    proposal = 2,
+    expires_in = 0,
+    owner = "Poland",
+    subject = "Rome",
+    type = 1,
+    status = 2,
+  }, extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 1, 2))
+end)
+
+t.test("MPVotingSystemProposalResult omits a missing subject", function()
+  t.assert_deep_equal({
+    event = "mp_proposal_result",
+    turn = 142,
+    proposal = 2,
+    expires_in = 3,
+    owner = "Poland",
+    type = 0,
+    status = 1,
+  }, extractors.MPVotingSystemProposalResult(civ, 2, 3, 0, -1, 0, 1))
 end)

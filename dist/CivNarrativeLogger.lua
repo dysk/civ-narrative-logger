@@ -467,6 +467,10 @@ function M.UnitKilledInCombat(civ, killerId, ownerId, unitTypeId)
   }
 end
 
+local function civNameIfAny(civ, playerId)
+  return playerId >= 0 and civ.civName(playerId) or nil
+end
+
 function M.UnitPrekill(civ, ownerId, unitId, unitTypeId, x, y, delay, killerId)
   if delay then return nil end
   return {
@@ -477,7 +481,7 @@ function M.UnitPrekill(civ, ownerId, unitId, unitTypeId, x, y, delay, killerId)
     city = civ.cityNameAt(x, y),
     x = x,
     y = y,
-    killed_by = killerId >= 0 and civ.civName(killerId) or nil,
+    killed_by = civNameIfAny(civ, killerId),
   }
 end
 
@@ -546,6 +550,86 @@ function M.RebaseTo(civ, ownerId, unitId, x, y)
     city = civ.cityNameAt(x, y),
     x = x,
     y = y,
+  }
+end
+
+function M.TeamMeet(civ, teamA, teamB)
+  return {
+    event = "teams_met",
+    turn = civ.turn(),
+    team_a = teamA,
+    team_a_civs = civ.teamCivNames(teamA),
+    team_b = teamB,
+    team_b_civs = civ.teamCivNames(teamB),
+  }
+end
+
+function M.SetAlly(civ, minorId, oldAllyId, newAllyId)
+  return {
+    event = "city_state_ally_changed",
+    turn = civ.turn(),
+    city_state = civ.civName(minorId),
+    old_ally = civNameIfAny(civ, oldAllyId),
+    new_ally = civNameIfAny(civ, newAllyId),
+  }
+end
+
+function M.MinorAlliesChanged(civ, minorId, playerId, add, oldValue, newValue)
+  return {
+    event = "city_state_alliance_changed",
+    turn = civ.turn(),
+    city_state = civ.civName(minorId),
+    civ = civ.civName(playerId),
+    allied = add,
+    old_friendship = oldValue,
+    new_friendship = newValue,
+  }
+end
+
+function M.MinorFriendsChanged(civ, minorId, playerId, add, oldValue, newValue)
+  return {
+    event = "city_state_friendship_changed",
+    turn = civ.turn(),
+    city_state = civ.civName(minorId),
+    civ = civ.civName(playerId),
+    friends = add,
+    old_friendship = oldValue,
+    new_friendship = newValue,
+  }
+end
+
+function M.UiDiploEvent(civ, eventTypeId, aiPlayerId, arg1, arg2)
+  return {
+    event = "diplo_event",
+    turn = civ.turn(),
+    type = eventTypeId,
+    civ = civ.civName(aiPlayerId),
+    arg1 = arg1,
+    arg2 = arg2,
+  }
+end
+
+function M.MPVotingSystemVote(civ, proposalId, voterId, vote)
+  return {
+    event = "mp_vote",
+    turn = civ.turn(),
+    proposal = proposalId,
+    civ = civ.civName(voterId),
+    vote = vote,
+  }
+end
+
+function M.MPVotingSystemProposalResult(civ, proposalId, expiration,
+    ownerId, subjectId, typeId, statusId)
+  return {
+    event = "mp_proposal_result",
+    turn = civ.turn(),
+    proposal = proposalId,
+    expires_in = expiration,
+    owner = civNameIfAny(civ, ownerId),
+    subject = civNameIfAny(civ, subjectId),
+    type = typeId,
+    status = statusId,
   }
 end
 
