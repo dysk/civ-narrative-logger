@@ -143,6 +143,15 @@ function M.new(g)
     return typeOf(g.GameInfo.UnitPromotions[promotionId])
   end
 
+  function civ.improvementType(improvementId)
+    return typeOf(g.GameInfo.Improvements[improvementId])
+  end
+
+  function civ.cityOwnerAt(x, y)
+    local city = g.Map.GetPlot(x, y):GetPlotCity()
+    return city and civ.civName(city:GetOwner()) or nil
+  end
+
   function civ.featureType(featureId)
     return typeOf(g.GameInfo.Features[featureId])
   end
@@ -630,6 +639,92 @@ function M.MPVotingSystemProposalResult(civ, proposalId, expiration,
     subject = civNameIfAny(civ, subjectId),
     type = typeId,
     status = statusId,
+  }
+end
+
+function M.CityBoughtPlot(civ, ownerId, cityId, x, y, gold, culture)
+  return {
+    event = "plot_bought",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    city = civ.cityName(ownerId, cityId),
+    x = x,
+    y = y,
+    bought_with = (gold and "gold") or (culture and "culture") or nil,
+  }
+end
+
+function M.CityAcquirePlot(civ, ownerId, cityId, x, y)
+  return {
+    event = "plot_acquired",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    city = civ.cityName(ownerId, cityId),
+    x = x,
+    y = y,
+  }
+end
+
+function M.SetPopulation(civ, x, y, oldPopulation, newPopulation)
+  return {
+    event = "population_changed",
+    turn = civ.turn(),
+    civ = civ.cityOwnerAt(x, y),
+    city = civ.cityNameAt(x, y),
+    x = x,
+    y = y,
+    old_population = oldPopulation,
+    new_population = newPopulation,
+  }
+end
+
+function M.BuildFinished(civ, playerId, x, y, improvementId)
+  return {
+    event = "improvement_built",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    improvement = civ.improvementType(improvementId),
+    x = x,
+    y = y,
+  }
+end
+
+function M.GoodyHutTechResearched(civ, playerId, techId)
+  return {
+    event = "tech_from_ruins",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    tech = civ.techType(techId),
+  }
+end
+
+function M.PlayerSetGoldenAge(civ, playerId)
+  return {
+    event = "golden_age_started",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+  }
+end
+
+function M.CityConvertsReligion(civ, ownerId, religionId, x, y)
+  return {
+    event = "city_converted",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    city = civ.cityNameAt(x, y),
+    religion = religionId >= 0 and civ.religionName(religionId) or nil,
+    x = x,
+    y = y,
+  }
+end
+
+function M.ReformationAdded(civ, playerId, religionId, beliefId)
+  return {
+    event = "reformation_added",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    religion = civ.religionName(religionId),
+    belief = civ.beliefType(beliefId),
   }
 end
 

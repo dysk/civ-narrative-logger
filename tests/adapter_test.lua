@@ -77,7 +77,10 @@ local globals = {
       return {
         GetPlotCity = function()
           if x == 10 and y == 20 then
-            return { GetName = function() return "Warsaw" end }
+            return {
+              GetName = function() return "Warsaw" end,
+              GetOwner = function() return 0 end,
+            }
           end
         end,
       }
@@ -103,6 +106,7 @@ local globals = {
     Policies = { [6] = { Type = "POLICY_LIBERTY" } },
     PolicyBranchTypes = { [2] = { Type = "POLICY_BRANCH_HONOR" } },
     UnitPromotions = { [3] = { Type = "PROMOTION_MORALE" } },
+    Improvements = { [17] = { Type = "IMPROVEMENT_FARM" } },
     Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
     Worlds = { [1] = { Type = "WORLDSIZE_STANDARD" } },
     GameSpeeds = { [1] = { Type = "GAMESPEED_QUICK" } },
@@ -190,6 +194,18 @@ end)
 
 t.test("promotionType resolves a promotion id to its Type string", function()
   t.assert_equal("PROMOTION_MORALE", civ.promotionType(3))
+end)
+
+t.test("improvementType resolves an improvement id to its Type string", function()
+  t.assert_equal("IMPROVEMENT_FARM", civ.improvementType(17))
+end)
+
+t.test("cityOwnerAt names the civ owning the city on a plot", function()
+  t.assert_equal("Poland", civ.cityOwnerAt(10, 20))
+end)
+
+t.test("cityOwnerAt is nil for a plot without a city", function()
+  t.assert_nil(civ.cityOwnerAt(0, 0))
 end)
 
 t.test("featureType resolves a feature id to its Type string", function()

@@ -87,6 +87,15 @@ function M.new(g)
     return typeOf(g.GameInfo.UnitPromotions[promotionId])
   end
 
+  function civ.improvementType(improvementId)
+    return typeOf(g.GameInfo.Improvements[improvementId])
+  end
+
+  function civ.cityOwnerAt(x, y)
+    local city = g.Map.GetPlot(x, y):GetPlotCity()
+    return city and civ.civName(city:GetOwner()) or nil
+  end
+
   function civ.featureType(featureId)
     return typeOf(g.GameInfo.Features[featureId])
   end

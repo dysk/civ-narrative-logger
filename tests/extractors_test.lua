@@ -61,6 +61,12 @@ local civ = {
   promotionType = function(promotionId)
     return promotionId == 3 and "PROMOTION_MORALE" or nil
   end,
+  improvementType = function(improvementId)
+    return improvementId == 17 and "IMPROVEMENT_FARM" or nil
+  end,
+  cityOwnerAt = function(x, y)
+    return (x == 10 and y == 20) and "Poland" or nil
+  end,
 }
 
 -- DLL: CityCaptureComplete(oldOwner, isCapital, x, y, newOwner,
@@ -632,4 +638,135 @@ t.test("MPVotingSystemProposalResult omits a missing subject", function()
     type = 0,
     status = 1,
   }, extractors.MPVotingSystemProposalResult(civ, 2, 3, 0, -1, 0, 1))
+end)
+
+-- DLL: CityBoughtPlot(ownerId, cityId, x, y, bGold, bCulture)
+--   -- bCulture=true is border growth via DoJONSCultureLevelIncrease
+t.test("CityBoughtPlot becomes a plot_bought record", function()
+  t.assert_deep_equal({
+    event = "plot_bought",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    x = 5,
+    y = 6,
+    bought_with = "gold",
+  }, extractors.CityBoughtPlot(civ, 0, 3, 5, 6, true, false))
+end)
+
+t.test("CityBoughtPlot records border growth as culture", function()
+  t.assert_deep_equal({
+    event = "plot_bought",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    x = 5,
+    y = 6,
+    bought_with = "culture",
+  }, extractors.CityBoughtPlot(civ, 0, 3, 5, 6, false, true))
+end)
+
+-- DLL: CityAcquirePlot(ownerId, cityId, x, y)
+t.test("CityAcquirePlot becomes a plot_acquired record", function()
+  t.assert_deep_equal({
+    event = "plot_acquired",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    x = 5,
+    y = 6,
+  }, extractors.CityAcquirePlot(civ, 0, 3, 5, 6))
+end)
+
+-- DLL: SetPopulation(x, y, oldPopulation, newPopulation)
+--   -- no owner pushed, city and civ resolved from the plot
+t.test("SetPopulation becomes a population_changed record", function()
+  t.assert_deep_equal({
+    event = "population_changed",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+    old_population = 4,
+    new_population = 5,
+  }, extractors.SetPopulation(civ, 10, 20, 4, 5))
+end)
+
+-- DLL: BuildFinished(playerId, x, y, improvementId)
+--   -- improvementId is -1 for builds that leave no improvement (roads,
+--   repairs)
+t.test("BuildFinished becomes an improvement_built record", function()
+  t.assert_deep_equal({
+    event = "improvement_built",
+    turn = 142,
+    civ = "Poland",
+    improvement = "IMPROVEMENT_FARM",
+    x = 5,
+    y = 6,
+  }, extractors.BuildFinished(civ, 0, 5, 6, 17))
+end)
+
+t.test("BuildFinished omits the improvement for roads and repairs", function()
+  t.assert_deep_equal({
+    event = "improvement_built",
+    turn = 142,
+    civ = "Poland",
+    x = 5,
+    y = 6,
+  }, extractors.BuildFinished(civ, 0, 5, 6, -1))
+end)
+
+-- DLL: GoodyHutTechResearched(playerId, techId)
+t.test("GoodyHutTechResearched becomes a tech_from_ruins record", function()
+  t.assert_deep_equal({
+    event = "tech_from_ruins",
+    turn = 142,
+    civ = "Poland",
+    tech = "TECH_POTTERY",
+  }, extractors.GoodyHutTechResearched(civ, 0, 12))
+end)
+
+-- DLL: PlayerSetGoldenAge(playerId) -- fires inside the isGoldenAge branch
+t.test("PlayerSetGoldenAge becomes a golden_age_started record", function()
+  t.assert_deep_equal({
+    event = "golden_age_started",
+    turn = 142,
+    civ = "Poland",
+  }, extractors.PlayerSetGoldenAge(civ, 0))
+end)
+
+-- DLL: CityConvertsReligion(ownerId, majorityReligionId, x, y)
+t.test("CityConvertsReligion becomes a city_converted record", function()
+  t.assert_deep_equal({
+    event = "city_converted",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    religion = "Buddhism",
+    x = 10,
+    y = 20,
+  }, extractors.CityConvertsReligion(civ, 0, 4, 10, 20))
+end)
+
+t.test("CityConvertsReligion omits a lost majority", function()
+  t.assert_deep_equal({
+    event = "city_converted",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+  }, extractors.CityConvertsReligion(civ, 0, -1, 10, 20))
+end)
+
+-- DLL: ReformationAdded(playerId, religionId, beliefId)
+t.test("ReformationAdded becomes a reformation_added record", function()
+  t.assert_deep_equal({
+    event = "reformation_added",
+    turn = 142,
+    civ = "Poland",
+    religion = "Buddhism",
+    belief = "BELIEF_TITHE",
+  }, extractors.ReformationAdded(civ, 0, 4, 10))
 end)
