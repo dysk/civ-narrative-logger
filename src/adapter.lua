@@ -83,6 +83,10 @@ function M.new(g)
     return typeOf(g.GameInfo.PolicyBranchTypes[branchId])
   end
 
+  function civ.promotionType(promotionId)
+    return typeOf(g.GameInfo.UnitPromotions[promotionId])
+  end
+
   function civ.featureType(featureId)
     return typeOf(g.GameInfo.Features[featureId])
   end

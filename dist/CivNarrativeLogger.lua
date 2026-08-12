@@ -139,6 +139,10 @@ function M.new(g)
     return typeOf(g.GameInfo.PolicyBranchTypes[branchId])
   end
 
+  function civ.promotionType(promotionId)
+    return typeOf(g.GameInfo.UnitPromotions[promotionId])
+  end
+
   function civ.featureType(featureId)
     return typeOf(g.GameInfo.Features[featureId])
   end
@@ -438,6 +442,110 @@ function M.NaturalWonderDiscovered(civ, teamId, featureId, x, y, first)
     x = x,
     y = y,
     first = first,
+  }
+end
+
+function M.UnitCreated(civ, ownerId, unitId, x, y)
+  return {
+    event = "unit_created",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    city = civ.cityNameAt(x, y),
+    x = x,
+    y = y,
+  }
+end
+
+function M.UnitKilledInCombat(civ, killerId, ownerId, unitTypeId)
+  return {
+    event = "unit_killed",
+    turn = civ.turn(),
+    killer = civ.civName(killerId),
+    victim = civ.civName(ownerId),
+    unit = civ.unitTypeName(unitTypeId),
+  }
+end
+
+function M.UnitPrekill(civ, ownerId, unitId, unitTypeId, x, y, delay, killerId)
+  if delay then return nil end
+  return {
+    event = "unit_lost",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitTypeName(unitTypeId),
+    city = civ.cityNameAt(x, y),
+    x = x,
+    y = y,
+    killed_by = killerId >= 0 and civ.civName(killerId) or nil,
+  }
+end
+
+function M.UnitPromoted(civ, ownerId, unitId, promotionId)
+  return {
+    event = "unit_promoted",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    promotion = civ.promotionType(promotionId),
+  }
+end
+
+function M.UnitUpgraded(civ, ownerId, oldUnitId, newUnitId, goodyHut)
+  return {
+    event = "unit_upgraded",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    from = civ.unitType(ownerId, oldUnitId),
+    to = civ.unitType(ownerId, newUnitId),
+    goody_hut = goodyHut or nil,
+  }
+end
+
+function M.UnitPillaged(civ, ownerId, unitId, x, y)
+  return {
+    event = "improvement_pillaged",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    x = x,
+    y = y,
+  }
+end
+
+function M.UnitPlundered(civ, ownerId, unitId, x, y)
+  return {
+    event = "trade_route_plundered",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    x = x,
+    y = y,
+  }
+end
+
+function M.ParadropAt(civ, ownerId, unitId, fromX, fromY, toX, toY)
+  return {
+    event = "paradrop",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    from_x = fromX,
+    from_y = fromY,
+    to_x = toX,
+    to_y = toY,
+  }
+end
+
+function M.RebaseTo(civ, ownerId, unitId, x, y)
+  return {
+    event = "unit_rebased",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    unit = civ.unitType(ownerId, unitId),
+    city = civ.cityNameAt(x, y),
+    x = x,
+    y = y,
   }
 end
 

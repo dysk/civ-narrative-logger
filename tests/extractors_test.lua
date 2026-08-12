@@ -27,7 +27,8 @@ local civ = {
     return ({ [7] = "world", [8] = "national" })[buildingId]
   end,
   unitType = function(playerId, unitId)
-    return (playerId == 0 and unitId == 9) and "UNIT_SETTLER" or nil
+    if playerId ~= 0 then return nil end
+    return ({ [9] = "UNIT_SETTLER", [14] = "UNIT_LANCER" })[unitId]
   end,
   projectType = function(projectId)
     return projectId == 2 and "PROJECT_APOLLO_PROGRAM" or nil
@@ -56,6 +57,9 @@ local civ = {
   end,
   unitTypeName = function(unitTypeId)
     return unitTypeId == 30 and "UNIT_GREAT_SCIENTIST" or nil
+  end,
+  promotionType = function(promotionId)
+    return promotionId == 3 and "PROMOTION_MORALE" or nil
   end,
 }
 
@@ -375,4 +379,144 @@ t.test("sessionStarted merges settings, roster and turn", function()
       { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
     },
   }, extractors.sessionStarted(civ))
+end)
+
+-- DLL: UnitCreated(ownerId, unitInstanceId, x, y)
+t.test("UnitCreated becomes a unit_created record", function()
+  t.assert_deep_equal({
+    event = "unit_created",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+  }, extractors.UnitCreated(civ, 0, 9, 10, 20))
+end)
+
+-- DLL: UnitKilledInCombat(killerPlayerId, ownerPlayerId, unitTypeId)
+t.test("UnitKilledInCombat becomes a unit_killed record", function()
+  t.assert_deep_equal({
+    event = "unit_killed",
+    turn = 142,
+    killer = "Poland",
+    victim = "Rome",
+    unit = "UNIT_GREAT_SCIENTIST",
+  }, extractors.UnitKilledInCombat(civ, 0, 1, 30))
+end)
+
+-- DLL: UnitPrekill(ownerId, unitInstanceId, unitTypeId, x, y, bDelay,
+--   killerPlayerId) -- fires twice on delayed deaths, bDelay=true first
+t.test("UnitPrekill becomes a unit_lost record", function()
+  t.assert_deep_equal({
+    event = "unit_lost",
+    turn = 142,
+    civ = "Rome",
+    unit = "UNIT_GREAT_SCIENTIST",
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+    killed_by = "Poland",
+  }, extractors.UnitPrekill(civ, 1, 22, 30, 10, 20, false, 0))
+end)
+
+t.test("UnitPrekill logs nothing on the delayed-death first fire", function()
+  t.assert_nil(extractors.UnitPrekill(civ, 1, 22, 30, 10, 20, true, 0))
+end)
+
+t.test("UnitPrekill without a killer omits killed_by", function()
+  t.assert_deep_equal({
+    event = "unit_lost",
+    turn = 142,
+    civ = "Rome",
+    unit = "UNIT_GREAT_SCIENTIST",
+    x = 5,
+    y = 6,
+  }, extractors.UnitPrekill(civ, 1, 22, 30, 5, 6, false, -1))
+end)
+
+-- DLL: UnitPromoted(ownerId, unitInstanceId, promotionId)
+t.test("UnitPromoted becomes a unit_promoted record", function()
+  t.assert_deep_equal({
+    event = "unit_promoted",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    promotion = "PROMOTION_MORALE",
+  }, extractors.UnitPromoted(civ, 0, 9, 3))
+end)
+
+-- DLL: UnitUpgraded(ownerId, oldUnitInstanceId, newUnitInstanceId,
+--   bGoodyHut) -- fires before the old unit is converted, both resolvable
+t.test("UnitUpgraded becomes a unit_upgraded record", function()
+  t.assert_deep_equal({
+    event = "unit_upgraded",
+    turn = 142,
+    civ = "Poland",
+    from = "UNIT_SETTLER",
+    to = "UNIT_LANCER",
+  }, extractors.UnitUpgraded(civ, 0, 9, 14, false))
+end)
+
+t.test("UnitUpgraded marks goody hut upgrades", function()
+  t.assert_deep_equal({
+    event = "unit_upgraded",
+    turn = 142,
+    civ = "Poland",
+    from = "UNIT_SETTLER",
+    to = "UNIT_LANCER",
+    goody_hut = true,
+  }, extractors.UnitUpgraded(civ, 0, 9, 14, true))
+end)
+
+-- DLL: UnitPillaged(ownerId, unitInstanceId, x, y) -- from CvUnit::pillage
+t.test("UnitPillaged becomes an improvement_pillaged record", function()
+  t.assert_deep_equal({
+    event = "improvement_pillaged",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    x = 5,
+    y = 6,
+  }, extractors.UnitPillaged(civ, 0, 9, 5, 6))
+end)
+
+-- DLL: UnitPlundered(ownerId, unitInstanceId, x, y)
+--   -- from CvUnit::plunderTradeRoute
+t.test("UnitPlundered becomes a trade_route_plundered record", function()
+  t.assert_deep_equal({
+    event = "trade_route_plundered",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    x = 5,
+    y = 6,
+  }, extractors.UnitPlundered(civ, 0, 9, 5, 6))
+end)
+
+-- DLL: ParadropAt(ownerId, unitInstanceId, fromX, fromY, toX, toY)
+t.test("ParadropAt becomes a paradrop record", function()
+  t.assert_deep_equal({
+    event = "paradrop",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    from_x = 5,
+    from_y = 6,
+    to_x = 7,
+    to_y = 8,
+  }, extractors.ParadropAt(civ, 0, 9, 5, 6, 7, 8))
+end)
+
+-- DLL: RebaseTo(ownerId, unitInstanceId, x, y)
+t.test("RebaseTo becomes a unit_rebased record", function()
+  t.assert_deep_equal({
+    event = "unit_rebased",
+    turn = 142,
+    civ = "Poland",
+    unit = "UNIT_SETTLER",
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+  }, extractors.RebaseTo(civ, 0, 9, 10, 20))
 end)

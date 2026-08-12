@@ -102,6 +102,7 @@ local globals = {
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
     Policies = { [6] = { Type = "POLICY_LIBERTY" } },
     PolicyBranchTypes = { [2] = { Type = "POLICY_BRANCH_HONOR" } },
+    UnitPromotions = { [3] = { Type = "PROMOTION_MORALE" } },
     Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
     Worlds = { [1] = { Type = "WORLDSIZE_STANDARD" } },
     GameSpeeds = { [1] = { Type = "GAMESPEED_QUICK" } },
@@ -185,6 +186,10 @@ end)
 
 t.test("policyBranchType resolves a branch id to its Type string", function()
   t.assert_equal("POLICY_BRANCH_HONOR", civ.policyBranchType(2))
+end)
+
+t.test("promotionType resolves a promotion id to its Type string", function()
+  t.assert_equal("PROMOTION_MORALE", civ.promotionType(3))
 end)
 
 t.test("featureType resolves a feature id to its Type string", function()
