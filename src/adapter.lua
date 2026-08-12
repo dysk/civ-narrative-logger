@@ -43,9 +43,11 @@ function M.new(g)
     return g.GameInfo.Buildings[buildingId].Type
   end
 
-  function civ.isWonder(buildingId)
+  function civ.wonderClass(buildingId)
     local class = g.GameInfo.Buildings[buildingId].BuildingClass
-    return g.GameInfo.BuildingClasses[class].MaxGlobalInstances > 0
+    local limits = g.GameInfo.BuildingClasses[class]
+    if limits.MaxGlobalInstances > 0 then return "world" end
+    if limits.MaxPlayerInstances > 0 then return "national" end
   end
 
   function civ.unitType(playerId, unitId)
@@ -75,6 +77,10 @@ function M.new(g)
 
   function civ.policyType(policyId)
     return typeOf(g.GameInfo.Policies[policyId])
+  end
+
+  function civ.policyBranchType(branchId)
+    return typeOf(g.GameInfo.PolicyBranchTypes[branchId])
   end
 
   function civ.featureType(featureId)

@@ -20,9 +20,12 @@ local civ = {
     return techId == 12 and "TECH_POTTERY" or nil
   end,
   buildingType = function(buildingId)
-    return buildingId == 7 and "BUILDING_PYRAMIDS" or "BUILDING_GRANARY"
+    return ({ [7] = "BUILDING_PYRAMIDS", [8] = "BUILDING_NATIONAL_COLLEGE" })[buildingId]
+      or "BUILDING_GRANARY"
   end,
-  isWonder = function(buildingId) return buildingId == 7 end,
+  wonderClass = function(buildingId)
+    return ({ [7] = "world", [8] = "national" })[buildingId]
+  end,
   unitType = function(playerId, unitId)
     return (playerId == 0 and unitId == 9) and "UNIT_SETTLER" or nil
   end,
@@ -44,6 +47,9 @@ local civ = {
   end,
   policyType = function(policyId)
     return policyId == 6 and "POLICY_LIBERTY" or nil
+  end,
+  policyBranchType = function(branchId)
+    return branchId == 2 and "POLICY_BRANCH_HONOR" or nil
   end,
   featureType = function(featureId)
     return featureId == 21 and "FEATURE_EL_DORADO" or nil
@@ -117,8 +123,19 @@ t.test("CityConstructed becomes a building_constructed record", function()
     civ = "Poland",
     city = "Warsaw",
     building = "BUILDING_PYRAMIDS",
-    wonder = true,
+    wonder = "world",
   }, extractors.CityConstructed(civ, 0, 3, 7, false, false))
+end)
+
+t.test("CityConstructed marks national wonders", function()
+  t.assert_deep_equal({
+    event = "building_constructed",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    building = "BUILDING_NATIONAL_COLLEGE",
+    wonder = "national",
+  }, extractors.CityConstructed(civ, 0, 3, 8, false, false))
 end)
 
 t.test("CityConstructed records purchases with the currency used", function()
@@ -128,7 +145,6 @@ t.test("CityConstructed records purchases with the currency used", function()
     civ = "Poland",
     city = "Warsaw",
     building = "BUILDING_GRANARY",
-    wonder = false,
     bought_with = "gold",
   }, extractors.CityConstructed(civ, 0, 3, 5, true, false))
 end)
@@ -155,6 +171,17 @@ t.test("CityCreated becomes a project_completed record", function()
     city = "Warsaw",
     project = "PROJECT_APOLLO_PROGRAM",
   }, extractors.CityCreated(civ, 0, 3, 2, false, false))
+end)
+
+t.test("CityCreated records purchases with the currency used", function()
+  t.assert_deep_equal({
+    event = "project_completed",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    project = "PROJECT_APOLLO_PROGRAM",
+    bought_with = "gold",
+  }, extractors.CityCreated(civ, 0, 3, 2, true, false))
 end)
 
 t.test("CityTrained records faith purchases", function()
@@ -260,6 +287,26 @@ t.test("PlayerAdoptPolicy becomes a policy_adopted record", function()
     civ = "Poland",
     policy = "POLICY_LIBERTY",
   }, extractors.PlayerAdoptPolicy(civ, 0, 6))
+end)
+
+-- DLL: PlayerAdoptPolicyBranch(playerId, branchTypeId)
+t.test("PlayerAdoptPolicyBranch becomes a policy_branch_adopted record", function()
+  t.assert_deep_equal({
+    event = "policy_branch_adopted",
+    turn = 142,
+    civ = "Poland",
+    branch = "POLICY_BRANCH_HONOR",
+  }, extractors.PlayerAdoptPolicyBranch(civ, 0, 2))
+end)
+
+-- DLL: PlayerPolicyBranchUnlocked(playerId, branchTypeId)
+t.test("PlayerPolicyBranchUnlocked becomes a policy_branch_unlocked record", function()
+  t.assert_deep_equal({
+    event = "policy_branch_unlocked",
+    turn = 142,
+    civ = "Poland",
+    branch = "POLICY_BRANCH_HONOR",
+  }, extractors.PlayerPolicyBranchUnlocked(civ, 0, 2))
 end)
 
 -- DLL: CircumnavigatedGlobe(teamId)

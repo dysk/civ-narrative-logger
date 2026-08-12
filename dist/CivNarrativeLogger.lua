@@ -99,9 +99,11 @@ function M.new(g)
     return g.GameInfo.Buildings[buildingId].Type
   end
 
-  function civ.isWonder(buildingId)
+  function civ.wonderClass(buildingId)
     local class = g.GameInfo.Buildings[buildingId].BuildingClass
-    return g.GameInfo.BuildingClasses[class].MaxGlobalInstances > 0
+    local limits = g.GameInfo.BuildingClasses[class]
+    if limits.MaxGlobalInstances > 0 then return "world" end
+    if limits.MaxPlayerInstances > 0 then return "national" end
   end
 
   function civ.unitType(playerId, unitId)
@@ -131,6 +133,10 @@ function M.new(g)
 
   function civ.policyType(policyId)
     return typeOf(g.GameInfo.Policies[policyId])
+  end
+
+  function civ.policyBranchType(branchId)
+    return typeOf(g.GameInfo.PolicyBranchTypes[branchId])
   end
 
   function civ.featureType(featureId)
@@ -267,7 +273,7 @@ function M.CityConstructed(civ, ownerId, cityId, buildingId, gold, faith)
     civ = civ.civName(ownerId),
     city = civ.cityName(ownerId, cityId),
     building = civ.buildingType(buildingId),
-    wonder = civ.isWonder(buildingId),
+    wonder = civ.wonderClass(buildingId),
     bought_with = boughtWith(gold, faith),
   }
 end
@@ -283,13 +289,14 @@ function M.CityTrained(civ, ownerId, cityId, unitId, gold, faith)
   }
 end
 
-function M.CityCreated(civ, ownerId, cityId, projectId)
+function M.CityCreated(civ, ownerId, cityId, projectId, gold, faith)
   return {
     event = "project_completed",
     turn = civ.turn(),
     civ = civ.civName(ownerId),
     city = civ.cityName(ownerId, cityId),
     project = civ.projectType(projectId),
+    bought_with = boughtWith(gold, faith),
   }
 end
 
@@ -382,6 +389,24 @@ function M.PlayerAdoptPolicy(civ, playerId, policyId)
     turn = civ.turn(),
     civ = civ.civName(playerId),
     policy = civ.policyType(policyId),
+  }
+end
+
+function M.PlayerAdoptPolicyBranch(civ, playerId, branchId)
+  return {
+    event = "policy_branch_adopted",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    branch = civ.policyBranchType(branchId),
+  }
+end
+
+function M.PlayerPolicyBranchUnlocked(civ, playerId, branchId)
+  return {
+    event = "policy_branch_unlocked",
+    turn = civ.turn(),
+    civ = civ.civName(playerId),
+    branch = civ.policyBranchType(branchId),
   }
 end
 

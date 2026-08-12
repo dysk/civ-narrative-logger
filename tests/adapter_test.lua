@@ -90,14 +90,18 @@ local globals = {
     Buildings = {
       [7] = { Type = "BUILDING_PYRAMIDS", BuildingClass = "BUILDINGCLASS_PYRAMIDS" },
       [5] = { Type = "BUILDING_GRANARY", BuildingClass = "BUILDINGCLASS_GRANARY" },
+      [8] = { Type = "BUILDING_NATIONAL_COLLEGE",
+              BuildingClass = "BUILDINGCLASS_NATIONAL_COLLEGE" },
     },
     BuildingClasses = {
-      BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1 },
-      BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1 },
+      BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_NATIONAL_COLLEGE = { MaxGlobalInstances = -1, MaxPlayerInstances = 1 },
     },
     Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
     Policies = { [6] = { Type = "POLICY_LIBERTY" } },
+    PolicyBranchTypes = { [2] = { Type = "POLICY_BRANCH_HONOR" } },
     Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
     Worlds = { [1] = { Type = "WORLDSIZE_STANDARD" } },
     GameSpeeds = { [1] = { Type = "GAMESPEED_QUICK" } },
@@ -139,12 +143,16 @@ t.test("buildingType resolves a building id to its Type string", function()
   t.assert_equal("BUILDING_PYRAMIDS", civ.buildingType(7))
 end)
 
-t.test("isWonder is true for world wonders", function()
-  t.assert_equal(true, civ.isWonder(7))
+t.test("wonderClass is world for world wonders", function()
+  t.assert_equal("world", civ.wonderClass(7))
 end)
 
-t.test("isWonder is false for ordinary buildings", function()
-  t.assert_equal(false, civ.isWonder(5))
+t.test("wonderClass is national for national wonders", function()
+  t.assert_equal("national", civ.wonderClass(8))
+end)
+
+t.test("wonderClass is nil for ordinary buildings", function()
+  t.assert_nil(civ.wonderClass(5))
 end)
 
 t.test("unitType resolves a unit instance to its Type string", function()
@@ -173,6 +181,10 @@ end)
 
 t.test("policyType resolves a policy id to its Type string", function()
   t.assert_equal("POLICY_LIBERTY", civ.policyType(6))
+end)
+
+t.test("policyBranchType resolves a branch id to its Type string", function()
+  t.assert_equal("POLICY_BRANCH_HONOR", civ.policyBranchType(2))
 end)
 
 t.test("featureType resolves a feature id to its Type string", function()
