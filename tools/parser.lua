@@ -21,7 +21,10 @@ if arg and arg[0] and arg[0]:find("parser%.lua$") then
   local input = arg[1] and assert(io.open(arg[1], "r")) or io.stdin
   for line in input:lines() do
     local payload = M.payload(line)
-    if payload then io.write(payload, "\n") end
+    if payload then
+      io.write(payload, "\n")
+      io.flush()
+    end
   end
 end
 

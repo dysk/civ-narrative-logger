@@ -43,6 +43,74 @@ it out before restarting. City-states and barbarians appear in
 `tech_researched` records too (barbarians as team 63 with empty
 `civs`); filter downstream if unwanted.
 
+# Watching Lua.log live (surviving a crash)
+
+A manual `parser.lua` run only sees the log if someone copies it out
+before the next launch truncates it — if the pitboss crashes
+unexpectedly, that copy never happens and the whole session is lost.
+`tools/watch.sh` follows Lua.log continuously and appends parsed
+events to `events.jsonl` as they're written, so a crash only risks
+the last unflushed line instead of the whole log:
+
+```sh
+tools/watch.sh path/to/Logs/Lua.log path/to/events.jsonl
+```
+
+It runs until killed, so it needs a supervisor to survive reboots and
+restart on crash.
+
+On the Ubuntu pitboss server, a systemd user unit
+(`~/.config/systemd/user/civ-narrative-watch.service`):
+
+```ini
+[Unit]
+Description=Follow Lua.log into events.jsonl for civ-narrative-logger
+
+[Service]
+ExecStart=/path/to/civ-narrative-logger/tools/watch.sh \
+  /home/pitboss/.wine/drive_c/users/pitboss/Documents/My Games/Sid Meier's Civilization 5/Logs/Lua.log \
+  /path/to/civ-narrative-logger/tmp/events.jsonl
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+```
+
+```sh
+systemctl --user enable --now civ-narrative-watch.service
+journalctl --user -u civ-narrative-watch -f   # tail its own logs
+```
+
+For local testing on macOS, a launchd agent
+(`~/Library/LaunchAgents/com.civ-narrative-logger.watch.plist`) does
+the same job:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.civ-narrative-logger.watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/path/to/civ-narrative-logger/tools/watch.sh</string>
+    <string>/Users/you/Documents/Aspyr/Sid Meier's Civilization 5/Logs/Lua.log</string>
+    <string>/path/to/civ-narrative-logger/tmp/events.jsonl</string>
+  </array>
+  <key>KeepAlive</key><true/>
+</dict>
+</plist>
+```
+
+```sh
+launchctl load ~/Library/LaunchAgents/com.civ-narrative-logger.watch.plist
+```
+
+`events.jsonl` only grows across relaunches this way — start a fresh
+one per session by moving the old file aside first.
+
 # Enabling logging on a machine
 
 Logging is off by default everywhere. To enable it on a machine (the
