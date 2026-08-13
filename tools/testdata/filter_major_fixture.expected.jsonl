@@ -1,0 +1,6 @@
+{"event":"session_started","players":[{"civ":"Chile","human":true},{"civ":"Iroquois","human":false}],"turn":0}
+{"civ":"Chile","event":"tech_researched","tech":"TECH_POTTERY","turn":5}
+{"civ":"Kampala","event":"unit_lost","killed_by":"Iroquois","turn":11,"unit":"UNIT_WORKER","x":6,"y":6}
+{"event":"unit_killed","killer":"Chile","turn":16,"unit":"UNIT_BARBARIAN_WARRIOR","victim":"Barbarians"}
+{"event":"teams_met","team_a":22,"team_a_civs":["Harappa"],"team_b":1,"team_b_civs":["Iroquois"],"turn":7}
+{"city_state":"Kampala","event":"city_state_ally_changed","new_ally":"Iroquois","turn":40}

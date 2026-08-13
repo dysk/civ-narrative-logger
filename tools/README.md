@@ -111,6 +111,40 @@ launchctl load ~/Library/LaunchAgents/com.civ-narrative-logger.watch.plist
 `events.jsonl` only grows across relaunches this way — start a fresh
 one per session by moving the old file aside first.
 
+# Preparing events.jsonl for analysis or narrative generation
+
+The raw log includes every city-state and barbarian, and `unit_lost`
+fires on *any* unit removal - combat death, a spent great person, a
+settler founding a city, a captured city's garrison, a caravan
+finishing its route - with no indication of which. Two tools clean
+this up before you hand the log to an LLM or a strategy-analysis
+tool:
+
+```sh
+tools/pipeline.sh events.jsonl --out prepared.jsonl
+```
+
+This runs, in order:
+
+1. `tools/reconcile-unit-lost.jq` - adds `cause` (`killed`,
+   `expended`, `founded_city`, `city_captured`, `used_up`, or
+   `unknown`) and, where known, `killer` to every `unit_lost` record,
+   by cross-referencing `great_person_expended`, `city_founded`,
+   `city_captured` and `unit_killed` in the same log. See the
+   comment at the top of the `.jq` file for the full rule order and
+   the evidence behind the barbarian inference.
+2. `tools/filter-major.sh` - drops lines that are purely about
+   city-states or barbarians, keeping only what involves one of the
+   nations listed in the first `session_started` record's `players`.
+   Runs after step 1 on purpose: a city-state's unit `killed_by` (or
+   `killer:`) a major nation only becomes visible to the filter once
+   reconciliation has filled that field in.
+
+Each stage is also a standalone tool if you want to inspect or rerun
+just one of them (`tools/reconcile-unit-lost.jq` needs `jq -s -f`;
+`tools/filter-major.sh` takes a file argument). Fixture-based tests
+for both live in `tools/*.test.sh` / `tools/testdata/`.
+
 # Enabling logging on a machine
 
 Logging is off by default everywhere. To enable it on a machine (the

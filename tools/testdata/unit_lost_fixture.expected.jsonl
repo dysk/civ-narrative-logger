@@ -1,0 +1,17 @@
+{"event":"session_started","players":[{"civ":"Chile","human":true},{"civ":"Iroquois","human":false}],"turn":0}
+{"civ":"Chile","event":"tech_researched","tech":"TECH_POTTERY","turn":5}
+{"civ":"Chile","event":"unit_lost","killed_by":"Barbarians","turn":10,"unit":"UNIT_WORKER","x":5,"y":5,"cause":"killed","killer":"Barbarians","confidence":"confirmed"}
+{"civ":"Chile","event":"great_person_expended","great_person":"UNIT_PROPHET","turn":20}
+{"civ":"Chile","event":"unit_lost","turn":20,"unit":"UNIT_PROPHET","x":6,"y":6,"cause":"expended","confidence":"confirmed"}
+{"city":"Onondaga","civ":"Iroquois","event":"city_founded","turn":30,"x":7,"y":7}
+{"civ":"Iroquois","event":"unit_lost","turn":30,"unit":"UNIT_SETTLER","x":7,"y":7,"cause":"founded_city","confidence":"confirmed"}
+{"city":"Concepcion","civ":"Chile","event":"city_founded","turn":31,"x":8,"y":8}
+{"civ":"Chile","event":"unit_lost","turn":31,"unit":"UNIT_SPANISH_CONQUISTADOR","x":8,"y":8,"cause":"founded_city","confidence":"confirmed"}
+{"event":"unit_killed","killer":"Iroquois","turn":40,"unit":"UNIT_WARRIOR","victim":"Chile"}
+{"civ":"Chile","event":"unit_lost","turn":40,"unit":"UNIT_WARRIOR","x":9,"y":9,"cause":"killed","killer":"Iroquois","confidence":"confirmed"}
+{"civ":"Chile","event":"unit_lost","turn":40,"unit":"UNIT_WARRIOR","x":10,"y":9,"cause":"killed","killer":"Barbarians","confidence":"inferred"}
+{"capital":false,"city":"Valparaiso","civ":"Chile","conquest":true,"event":"city_captured","great_works":0,"great_works_captured":0,"new_owner":"Iroquois","old_owner":"Chile","population":4,"turn":50,"x":11,"y":11}
+{"civ":"Chile","event":"unit_lost","turn":50,"unit":"UNIT_SPEARMAN","x":11,"y":11,"cause":"city_captured","captured_by":"Iroquois","confidence":"confirmed"}
+{"civ":"Chile","event":"unit_lost","turn":60,"unit":"UNIT_CARAVAN","x":12,"y":12,"cause":"used_up","confidence":"confirmed"}
+{"civ":"Iroquois","event":"unit_lost","turn":70,"unit":"UNIT_ARCHER","x":13,"y":13,"cause":"killed","killer":"Barbarians","confidence":"inferred"}
+{"civ":"Barbarians","event":"unit_lost","turn":80,"unit":"UNIT_BARBARIAN_WARRIOR","x":14,"y":14,"cause":"unknown","confidence":"none"}
