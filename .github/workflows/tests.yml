@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: Lua test suite
+        run: luajit tests/run.lua
+      - name: filter-major test
+        run: tools/filter-major.test.sh
+      - name: reconcile-unit-lost test
+        run: tools/reconcile-unit-lost.test.sh
