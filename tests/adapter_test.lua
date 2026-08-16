@@ -49,6 +49,19 @@ local function fakePlayer(spec)
     end,
     CalculateGrossGold = function() return spec.grossGold end,
     GetNumPlots = function() return spec.plots end,
+    Cities = function()
+      local list = spec.citiesList or {}
+      local i = 0
+      return function()
+        i = i + 1
+        local c = list[i]
+        if not c then return nil end
+        return {
+          IsOriginalMajorCapital = function() return c.capital == true end,
+          GetOriginalOwner = function() return c.originalOwner end,
+        }
+      end
+    end,
   }
 end
 
@@ -66,6 +79,13 @@ local globals = {
     GetMapScript = function() return "Assets/Maps/Lekmap.lua" end,
   },
   YieldTypes = { YIELD_FOOD = "YIELD_FOOD", YIELD_PRODUCTION = "YIELD_PRODUCTION" },
+  GameInfoTypes = {
+    PROJECT_APOLLO_PROGRAM = "PROJECT_APOLLO_PROGRAM",
+    PROJECT_SS_BOOSTER = "PROJECT_SS_BOOSTER",
+    PROJECT_SS_COCKPIT = "PROJECT_SS_COCKPIT",
+    PROJECT_SS_STASIS_CHAMBER = "PROJECT_SS_STASIS_CHAMBER",
+    PROJECT_SS_ENGINE = "PROJECT_SS_ENGINE",
+  },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
     [0] = fakePlayer({
@@ -81,6 +101,11 @@ local globals = {
       influenceLevel = { [1] = 4 },
       influenceTrend = { [1] = 1 },
       production = 62, food = 18, grossGold = 45, plots = 87,
+      citiesList = {
+        { originalOwner = 0, capital = true },
+        { originalOwner = 1, capital = true },
+        { originalOwner = 1, capital = false },
+      },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
@@ -91,6 +116,16 @@ local globals = {
     [0] = {
       GetTeamTechs = function()
         return { GetNumTechsKnown = function() return 24 end }
+      end,
+      GetProjectCount = function(_, projectId)
+        local counts = {
+          PROJECT_APOLLO_PROGRAM = 1,
+          PROJECT_SS_BOOSTER = 2,
+          PROJECT_SS_COCKPIT = 1,
+          PROJECT_SS_STASIS_CHAMBER = 0,
+          PROJECT_SS_ENGINE = 1,
+        }
+        return counts[projectId] or 0
       end,
     },
   },
@@ -263,6 +298,14 @@ t.test("playerStats reads the full stat line of a living major civ", function()
     food = 18,
     gross_gold = 45,
     plots = 87,
+    capitals = { "Poland", "Rome" },
+    spaceship = {
+      apollo = 1,
+      booster = 2,
+      cockpit = 1,
+      stasis_chamber = 0,
+      engine = 1,
+    },
   }, civ.playerStats(0))
 end)
 

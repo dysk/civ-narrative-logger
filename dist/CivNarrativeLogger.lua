@@ -196,6 +196,30 @@ function M.new(g)
     return list
   end
 
+  local function projectId(projectType)
+    return g.GameInfoTypes[projectType]
+  end
+
+  local function capitalsOf(p)
+    local capitals = {}
+    for city in p:Cities() do
+      if city:IsOriginalMajorCapital() then
+        table.insert(capitals, civ.civName(city:GetOriginalOwner()))
+      end
+    end
+    return capitals
+  end
+
+  local function spaceshipOf(team)
+    return {
+      apollo = team:GetProjectCount(projectId("PROJECT_APOLLO_PROGRAM")),
+      booster = team:GetProjectCount(projectId("PROJECT_SS_BOOSTER")),
+      cockpit = team:GetProjectCount(projectId("PROJECT_SS_COCKPIT")),
+      stasis_chamber = team:GetProjectCount(projectId("PROJECT_SS_STASIS_CHAMBER")),
+      engine = team:GetProjectCount(projectId("PROJECT_SS_ENGINE")),
+    }
+  end
+
   function civ.playerStats(playerId)
     local p = g.Players[playerId]
     if not isLivingMajor(p) then
@@ -221,6 +245,8 @@ function M.new(g)
       food = p:CalculateTotalYield(g.YieldTypes.YIELD_FOOD),
       gross_gold = p:CalculateGrossGold(),
       plots = p:GetNumPlots(),
+      capitals = capitalsOf(p),
+      spaceship = spaceshipOf(g.Teams[p:GetTeam()]),
     }
   end
 
