@@ -21,7 +21,10 @@ function M.gameGlobals(storedFlag)
     Modding = M.modding(storedFlag),
     GameEvents = setmetatable({}, {
       __index = function(_, name)
-        return { Add = function(fn) handlers[name] = fn end }
+        return { Add = function(fn)
+          handlers[name] = handlers[name] or {}
+          table.insert(handlers[name], fn)
+        end }
       end,
     }),
     print = function(line) table.insert(lines, line) end,

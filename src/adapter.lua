@@ -35,6 +35,14 @@ function M.new(g)
     return city and city:GetName() or nil
   end
 
+  function civ.citySet(playerId)
+    local cities = {}
+    for city in g.Players[playerId]:Cities() do
+      cities[city:GetID()] = { name = city:GetName(), x = city:GetX(), y = city:GetY() }
+    end
+    return cities
+  end
+
   function civ.techType(techId)
     return g.GameInfo.Technologies[techId].Type
   end

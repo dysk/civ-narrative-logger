@@ -91,6 +91,14 @@ function M.new(g)
     return city and city:GetName() or nil
   end
 
+  function civ.citySet(playerId)
+    local cities = {}
+    for city in g.Players[playerId]:Cities() do
+      cities[city:GetID()] = { name = city:GetName(), x = city:GetX(), y = city:GetY() }
+    end
+    return cities
+  end
+
   function civ.techType(techId)
     return g.GameInfo.Technologies[techId].Type
   end
@@ -858,6 +866,51 @@ end
 return M
 end)
 
+register("src.census", function()
+-- Keeps a per-player city census between turns and emits city_destroyed
+-- when a known city disappears. Razing fires no DLL hook (CvCity::
+-- DoRazingTurn -> CvPlayer::disband contains no CallHook), so this is
+-- polled once per player per turn via PlayerDoTurn rather than pushed
+-- as an event. Registered directly on PlayerDoTurn (bypassing
+-- logger.attach) since it needs cross-turn state and may emit zero or
+-- more records per firing, unlike the one-hook-one-record extractors.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (census)", error = tostring(err) }
+end
+
+function M.new(civ, sink)
+  local known = {}
+
+  local function poll(playerId)
+    local current = civ.citySet(playerId)
+    for cityId, city in pairs(known[playerId] or {}) do
+      if not current[cityId] then
+        sink(json.encode({
+          event = "city_destroyed",
+          turn = civ.turn(),
+          civ = civ.civName(playerId),
+          city = city.name,
+          x = city.x,
+          y = city.y,
+        }))
+      end
+    end
+    known[playerId] = current
+  end
+
+  return function(playerId)
+    local ok, err = pcall(poll, playerId)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.main", function()
 -- Entry point: gate on the local opt-in flag, then wire the logger
 -- to the real game. Receives the game globals as a table so tests
@@ -865,6 +918,7 @@ register("src.main", function()
 local adapter = _require("src.adapter")
 local extractors = _require("src.extractors")
 local logger = _require("src.logger")
+local census = _require("src.census")
 
 local M = {}
 
@@ -884,6 +938,7 @@ function M.start(g)
   }
   logger.attach(deps)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
+  g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
 end
 
 return M

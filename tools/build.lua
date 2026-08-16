@@ -6,6 +6,7 @@ local FILES = {
   "src.adapter",
   "src.extractors",
   "src.logger",
+  "src.census",
   "src.main",
 }
 

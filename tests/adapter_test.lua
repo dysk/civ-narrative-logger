@@ -59,6 +59,10 @@ local function fakePlayer(spec)
         return {
           IsOriginalMajorCapital = function() return c.capital == true end,
           GetOriginalOwner = function() return c.originalOwner end,
+          GetID = function() return c.id end,
+          GetName = function() return c.name end,
+          GetX = function() return c.x end,
+          GetY = function() return c.y end,
         }
       end
     end,
@@ -110,9 +114,9 @@ local globals = {
       influenceTrend = { [1] = 1 },
       production = 62, food = 18, grossGold = 45, plots = 87,
       citiesList = {
-        { originalOwner = 0, capital = true },
-        { originalOwner = 1, capital = true },
-        { originalOwner = 1, capital = false },
+        { id = 3, name = "Warsaw", x = 10, y = 20, originalOwner = 0, capital = true },
+        { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true },
+        { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false },
       },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
@@ -205,6 +209,14 @@ end)
 
 t.test("cityName resolves a city id on its owner", function()
   t.assert_equal("Warsaw", civ.cityName(0, 3))
+end)
+
+t.test("citySet maps a player's current cities by id", function()
+  t.assert_deep_equal({
+    [3] = { name = "Warsaw", x = 10, y = 20 },
+    [7] = { name = "Rome (captured)", x = 15, y = 22 },
+    [9] = { name = "Krakow", x = 11, y = 21 },
+  }, civ.citySet(0))
 end)
 
 t.test("techType resolves a tech id to its Type string", function()
