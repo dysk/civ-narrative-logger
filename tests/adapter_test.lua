@@ -43,6 +43,12 @@ local function fakePlayer(spec)
     GetInfluenceTrend = function(_, otherId)
       return spec.influenceTrend and spec.influenceTrend[otherId]
     end,
+    CalculateTotalYield = function(_, yieldTypeId)
+      if yieldTypeId == "YIELD_PRODUCTION" then return spec.production end
+      if yieldTypeId == "YIELD_FOOD" then return spec.food end
+    end,
+    CalculateGrossGold = function() return spec.grossGold end,
+    GetNumPlots = function() return spec.plots end,
   }
 end
 
@@ -59,6 +65,7 @@ local globals = {
   PreGame = {
     GetMapScript = function() return "Assets/Maps/Lekmap.lua" end,
   },
+  YieldTypes = { YIELD_FOOD = "YIELD_FOOD", YIELD_PRODUCTION = "YIELD_PRODUCTION" },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
     [0] = fakePlayer({
@@ -73,6 +80,7 @@ local globals = {
       influenceOn = { [1] = 320 },
       influenceLevel = { [1] = 4 },
       influenceTrend = { [1] = 1 },
+      production = 62, food = 18, grossGold = 45, plots = 87,
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
@@ -251,6 +259,10 @@ t.test("playerStats reads the full stat line of a living major civ", function()
       { civ = "Rome", points = 320, level = "INFLUENCE_LEVEL_INFLUENTIAL",
         trend = "INFLUENCE_TREND_RISING" },
     },
+    production = 62,
+    food = 18,
+    gross_gold = 45,
+    plots = 87,
   }, civ.playerStats(0))
 end)
 

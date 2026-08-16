@@ -161,6 +161,10 @@ function M.new(g)
       tourism = p:GetTourism(),
       civs_influential_on = p:GetNumCivsInfluentialOn(),
       influence = influenceList(p, playerId),
+      production = p:CalculateTotalYield(g.YieldTypes.YIELD_PRODUCTION),
+      food = p:CalculateTotalYield(g.YieldTypes.YIELD_FOOD),
+      gross_gold = p:CalculateGrossGold(),
+      plots = p:GetNumPlots(),
     }
   end
 
