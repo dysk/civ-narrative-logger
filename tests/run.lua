@@ -7,6 +7,7 @@ local files = {
   "tests.logger_test",
   "tests.adapter_test",
   "tests.census_test",
+  "tests.congress_test",
   "tests.main_test",
   "tests.build_test",
   "tests.parser_test",

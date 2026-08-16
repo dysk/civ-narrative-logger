@@ -300,6 +300,62 @@ function M.new(g)
     return roster
   end
 
+  local function resolutionType(id)
+    return typeOf(g.GameInfo.Resolutions[id])
+  end
+
+  local function proposalRecord(p, repeal)
+    return {
+      id = p.ID,
+      type = resolutionType(p.Type),
+      proposer = civ.civName(p.ProposalPlayer),
+      repeal = repeal,
+    }
+  end
+
+  local function congressDelegates(league)
+    local delegates = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        table.insert(delegates, {
+          civ = p:GetCivilizationShortDescription(),
+          votes = league:CalculateStartingVotesForMember(i),
+          core_votes = league:GetCoreVotesForMember(i),
+        })
+      end
+    end
+    return delegates
+  end
+
+  function civ.congressSnapshot()
+    local league = g.Game.GetActiveLeague()
+    if not league then return nil end
+
+    local proposals = {}
+    for _, p in ipairs(league:GetEnactProposals()) do
+      proposals[p.ID] = proposalRecord(p, false)
+    end
+    for _, p in ipairs(league:GetRepealProposals()) do
+      proposals[p.ID] = proposalRecord(p, true)
+    end
+
+    local activeResolutions = {}
+    for _, r in ipairs(league:GetActiveResolutions()) do
+      activeResolutions[r.ID] = { id = r.ID, type = resolutionType(r.Type) }
+    end
+
+    local host = league:GetHostMember()
+    return {
+      host = host >= 0 and civ.civName(host) or nil,
+      united_nations = league:IsUnitedNations(),
+      votes_needed_for_diplo_victory = g.Game.GetVotesNeededForDiploVictory(),
+      delegates = congressDelegates(league),
+      proposals = proposals,
+      active_resolutions = activeResolutions,
+    }
+  end
+
   return civ
 end
 
@@ -911,6 +967,118 @@ end
 return M
 end)
 
+register("src.congress", function()
+-- Polls the World Congress once per turn and diffs it into events. No
+-- GameEvents hook covers the Congress (mp_vote/mp_proposal_result are
+-- Lekmod's own multiplayer voting, unrelated), so the league state is
+-- read via Game.GetActiveLeague() and compared turn to turn. Registered
+-- directly on PlayerDoTurn (bypassing logger.attach) since it needs
+-- cross-turn state, may emit zero or more records per firing, and must
+-- emit congress_snapshot once per turn even though PlayerDoTurn fires
+-- once per player.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (congress)", error = tostring(err) }
+end
+
+local function diffProposed(sink, turn, known, current)
+  for id, proposal in pairs(current) do
+    if not known[id] then
+      sink(json.encode({
+        event = "resolution_proposed",
+        turn = turn,
+        resolution = proposal.type,
+        proposer = proposal.proposer,
+        repeal = proposal.repeal,
+      }))
+    end
+  end
+end
+
+local function diffResolved(sink, turn, known, current, activeResolutions)
+  for id, proposal in pairs(known) do
+    if not current[id] then
+      if activeResolutions[id] then
+        sink(json.encode({
+          event = "resolution_passed", turn = turn, resolution = proposal.type,
+        }))
+      else
+        sink(json.encode({
+          event = "resolution_failed", turn = turn, resolution = proposal.type,
+        }))
+      end
+    end
+  end
+end
+
+local function diffRepealed(sink, turn, known, current)
+  for id, resolution in pairs(known) do
+    if not current[id] then
+      sink(json.encode({
+        event = "resolution_repealed", turn = turn, resolution = resolution.type,
+      }))
+    end
+  end
+end
+
+local function diff(sink, turn, known, snapshot)
+  if known.host ~= snapshot.host then
+    sink(json.encode({
+      event = "congress_host_changed", turn = turn,
+      old_host = known.host, new_host = snapshot.host,
+    }))
+  end
+  if snapshot.united_nations and not known.united_nations then
+    sink(json.encode({ event = "united_nations_formed", turn = turn }))
+  end
+  diffProposed(sink, turn, known.proposals, snapshot.proposals)
+  diffResolved(sink, turn, known.proposals, snapshot.proposals, snapshot.active_resolutions)
+  diffRepealed(sink, turn, known.active_resolutions, snapshot.active_resolutions)
+end
+
+function M.new(civ, sink)
+  local state = { turn = nil, snapshot = nil }
+
+  local function poll()
+    local turn = civ.turn()
+    if turn == state.turn then return end
+    state.turn = turn
+
+    local snapshot = civ.congressSnapshot()
+    if not snapshot then
+      state.snapshot = nil
+      return
+    end
+
+    if not state.snapshot then
+      sink(json.encode({ event = "congress_founded", turn = turn, host = snapshot.host }))
+    else
+      diff(sink, turn, state.snapshot, snapshot)
+    end
+
+    sink(json.encode({
+      event = "congress_snapshot",
+      turn = turn,
+      host = snapshot.host,
+      delegates = snapshot.delegates,
+      votes_needed_for_diplo_victory = snapshot.votes_needed_for_diplo_victory,
+    }))
+
+    state.snapshot = snapshot
+  end
+
+  return function(playerId)
+    local ok, err = pcall(poll, playerId)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.main", function()
 -- Entry point: gate on the local opt-in flag, then wire the logger
 -- to the real game. Receives the game globals as a table so tests
@@ -919,6 +1087,7 @@ local adapter = _require("src.adapter")
 local extractors = _require("src.extractors")
 local logger = _require("src.logger")
 local census = _require("src.census")
+local congress = _require("src.congress")
 
 local M = {}
 
@@ -939,6 +1108,7 @@ function M.start(g)
   logger.attach(deps)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
 end
 
 return M

@@ -5,6 +5,7 @@ local adapter = require("src.adapter")
 local extractors = require("src.extractors")
 local logger = require("src.logger")
 local census = require("src.census")
+local congress = require("src.congress")
 
 local M = {}
 
@@ -25,6 +26,7 @@ function M.start(g)
   logger.attach(deps)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
 end
 
 return M

@@ -244,6 +244,62 @@ function M.new(g)
     return roster
   end
 
+  local function resolutionType(id)
+    return typeOf(g.GameInfo.Resolutions[id])
+  end
+
+  local function proposalRecord(p, repeal)
+    return {
+      id = p.ID,
+      type = resolutionType(p.Type),
+      proposer = civ.civName(p.ProposalPlayer),
+      repeal = repeal,
+    }
+  end
+
+  local function congressDelegates(league)
+    local delegates = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        table.insert(delegates, {
+          civ = p:GetCivilizationShortDescription(),
+          votes = league:CalculateStartingVotesForMember(i),
+          core_votes = league:GetCoreVotesForMember(i),
+        })
+      end
+    end
+    return delegates
+  end
+
+  function civ.congressSnapshot()
+    local league = g.Game.GetActiveLeague()
+    if not league then return nil end
+
+    local proposals = {}
+    for _, p in ipairs(league:GetEnactProposals()) do
+      proposals[p.ID] = proposalRecord(p, false)
+    end
+    for _, p in ipairs(league:GetRepealProposals()) do
+      proposals[p.ID] = proposalRecord(p, true)
+    end
+
+    local activeResolutions = {}
+    for _, r in ipairs(league:GetActiveResolutions()) do
+      activeResolutions[r.ID] = { id = r.ID, type = resolutionType(r.Type) }
+    end
+
+    local host = league:GetHostMember()
+    return {
+      host = host >= 0 and civ.civName(host) or nil,
+      united_nations = league:IsUnitedNations(),
+      votes_needed_for_diplo_victory = g.Game.GetVotesNeededForDiploVictory(),
+      delegates = congressDelegates(league),
+      proposals = proposals,
+      active_resolutions = activeResolutions,
+    }
+  end
+
   return civ
 end
 

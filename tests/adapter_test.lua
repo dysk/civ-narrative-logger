@@ -370,3 +370,65 @@ t.test("playerRoster lists living majors with identity and handicap", function()
     { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
   }, civ.playerRoster())
 end)
+
+local function fakeLeague(spec)
+  return {
+    GetHostMember = function() return spec.host end,
+    IsUnitedNations = function() return spec.unitedNations == true end,
+    CalculateStartingVotesForMember = function(_, playerId)
+      return spec.votes[playerId]
+    end,
+    GetCoreVotesForMember = function(_, playerId)
+      return spec.coreVotes[playerId]
+    end,
+    GetEnactProposals = function() return spec.enactProposals or {} end,
+    GetRepealProposals = function() return spec.repealProposals or {} end,
+    GetActiveResolutions = function() return spec.activeResolutions or {} end,
+  }
+end
+
+local congressGlobals
+congressGlobals = {
+  Game = {
+    GetActiveLeague = function() return congressGlobals._league end,
+    GetVotesNeededForDiploVictory = function() return 14 end,
+  },
+  GameDefines = { MAX_CIV_PLAYERS = 3 },
+  Players = globals.Players,
+  GameInfo = {
+    Resolutions = { [5] = { Type = "RESOLUTION_EMBARGO" } },
+  },
+}
+local congressCiv = adapter.new(congressGlobals)
+
+t.test("congressSnapshot is nil when no league has been founded", function()
+  congressGlobals._league = nil
+  t.assert_nil(congressCiv.congressSnapshot())
+end)
+
+t.test("congressSnapshot reads host, delegates and proposals", function()
+  congressGlobals._league = fakeLeague({
+    host = 0,
+    unitedNations = false,
+    votes = { [0] = 5, [1] = 2 },
+    coreVotes = { [0] = 1, [1] = 1 },
+    enactProposals = {
+      { ID = 5, Type = 5, ProposerDecision = -1, VoterDecision = -1, ProposalPlayer = 0 },
+    },
+    repealProposals = {},
+    activeResolutions = {},
+  })
+  t.assert_deep_equal({
+    host = "Poland",
+    united_nations = false,
+    votes_needed_for_diplo_victory = 14,
+    delegates = {
+      { civ = "Poland", votes = 5, core_votes = 1 },
+      { civ = "Rome", votes = 2, core_votes = 1 },
+    },
+    proposals = {
+      [5] = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false },
+    },
+    active_resolutions = {},
+  }, congressCiv.congressSnapshot())
+end)
