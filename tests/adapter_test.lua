@@ -131,6 +131,7 @@ local globals = {
   },
   Map = {
     GetWorldSize = function() return 1 end,
+    GetGridSize = function() return 44, 26 end,
     GetPlot = function(x, y)
       return {
         GetPlotCity = function()
@@ -331,6 +332,8 @@ t.test("gameSettings reads map, size, speed, turn limit and start era", function
   t.assert_deep_equal({
     map_script = "Assets/Maps/Lekmap.lua",
     map_size = "WORLDSIZE_STANDARD",
+    map_width = 44,
+    map_height = 26,
     game_speed = "GAMESPEED_QUICK",
     max_turns = 330,
     start_era = "ERA_CLASSICAL",

@@ -195,9 +195,12 @@ function M.new(g)
   end
 
   function civ.gameSettings()
+    local width, height = g.Map.GetGridSize()
     return {
       map_script = g.PreGame.GetMapScript(),
       map_size = typeOf(g.GameInfo.Worlds[g.Map.GetWorldSize()]),
+      map_width = width,
+      map_height = height,
       game_speed = typeOf(g.GameInfo.GameSpeeds[g.Game.GetGameSpeedType()]),
       max_turns = g.Game.GetMaxTurns(),
       start_era = civ.eraType(g.Game.GetStartEra()),

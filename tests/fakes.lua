@@ -29,7 +29,10 @@ function M.gameGlobals(storedFlag)
       GetStartEra = function() return 2 end,
     },
     PreGame = { GetMapScript = function() return "Lekmap.lua" end },
-    Map = { GetWorldSize = function() return 1 end },
+    Map = {
+      GetWorldSize = function() return 1 end,
+      GetGridSize = function() return 44, 26 end,
+    },
     GameDefines = { MAX_CIV_PLAYERS = 1 },
     Players = {
       [0] = {
