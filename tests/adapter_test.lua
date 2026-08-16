@@ -78,6 +78,14 @@ local globals = {
   PreGame = {
     GetMapScript = function() return "Assets/Maps/Lekmap.lua" end,
   },
+  Modding = {
+    GetActivatedMods = function()
+      return {
+        { ID = "b2be3c8b-5f00-4d3e-9c00-000000000000", Version = 34 },
+        { ID = "e1ccf71a-f248-498c-8f30-5ca6d851079d", Version = 1 },
+      }
+    end,
+  },
   YieldTypes = { YIELD_FOOD = "YIELD_FOOD", YIELD_PRODUCTION = "YIELD_PRODUCTION" },
   GameInfoTypes = {
     PROJECT_APOLLO_PROGRAM = "PROJECT_APOLLO_PROGRAM",
@@ -337,6 +345,10 @@ t.test("gameSettings reads map, size, speed, turn limit and start era", function
     game_speed = "GAMESPEED_QUICK",
     max_turns = 330,
     start_era = "ERA_CLASSICAL",
+    mods = {
+      { id = "b2be3c8b-5f00-4d3e-9c00-000000000000", version = 34 },
+      { id = "e1ccf71a-f248-498c-8f30-5ca6d851079d", version = 1 },
+    },
   }, civ.gameSettings())
 end)
 

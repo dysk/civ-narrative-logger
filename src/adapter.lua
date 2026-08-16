@@ -194,6 +194,14 @@ function M.new(g)
     }
   end
 
+  local function activatedMods()
+    local mods = {}
+    for _, mod in ipairs(g.Modding.GetActivatedMods()) do
+      table.insert(mods, { id = mod.ID, version = mod.Version })
+    end
+    return mods
+  end
+
   function civ.gameSettings()
     local width, height = g.Map.GetGridSize()
     return {
@@ -204,6 +212,7 @@ function M.new(g)
       game_speed = typeOf(g.GameInfo.GameSpeeds[g.Game.GetGameSpeedType()]),
       max_turns = g.Game.GetMaxTurns(),
       start_era = civ.eraType(g.Game.GetStartEra()),
+      mods = activatedMods(),
     }
   end
 

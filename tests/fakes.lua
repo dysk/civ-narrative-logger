@@ -6,6 +6,9 @@ function M.modding(storedValue)
       assert(name == "civ-narrative-logger" and version == 1)
       return { GetValue = function(key) return key == "enabled" and storedValue or nil end }
     end,
+    GetActivatedMods = function()
+      return { { ID = "b2be3c8b-5f00-4d3e-9c00-000000000000", Version = 34 } }
+    end,
   }
 end
 
