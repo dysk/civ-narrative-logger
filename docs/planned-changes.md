@@ -47,6 +47,43 @@ Consumer fallback: none for production, food and land — no event carries
 them. Gross gold, approval and literacy are partially derivable, but only
 by guessing at expenses and at the ruleset's total tech count.
 
+## Emit World Congress state, so diplomacy stops being invisible
+
+No GameEvents hook covers the World Congress: the only hooks
+`CvVotingClasses.cpp` fires are LEKMOD's own multiplayer voting system —
+which is what the existing `mp_vote` / `mp_proposal_result` events are
+(remap/irr proposals among the human players), not the Congress. The
+league itself must be polled: its API is fully exposed to Lua
+(`CvLuaLeague.cpp`), reached via `Game.GetActiveLeague()`.
+
+Once per turn (the same poll the city census needs), read:
+
+- league identity: `GetName()`, `IsUnitedNations()`, `GetHostMember()`,
+  `GetTurnsUntilSession()`, `GetTurnsUntilVictorySession()`
+- per member: `CalculateStartingVotesForMember()` (total delegates) and
+  `GetCoreVotesForMember()`
+- `GetEnactProposals()` / `GetRepealProposals()` — tables of
+  `{ID, Type, ProposerDecision, VoterDecision, ProposalPlayer}`, with
+  `Type` resolvable through `GameInfo.Resolutions`
+- `GetActiveResolutions()` — same shape minus `ProposalPlayer`
+- diplomatic victory: `Game.GetVotesNeededForDiploVictory()` and
+  `Game.IsUnitedNationsActive()`
+
+Emit one `congress_snapshot` record per turn (host, delegates per civ,
+votes needed for diplomatic victory) rather than duplicating the league
+into every player's snapshot, and diff the polled state turn to turn into
+events: `congress_founded`, `congress_host_changed`,
+`resolution_proposed`, `resolution_passed` / `resolution_failed` /
+`resolution_repealed`, `united_nations_formed`.
+
+Limit: how each player voted on a Congress resolution is not exposed as
+structured data — `GetMemberDetails()` and `GetResolutionDetails()`
+return localized tooltip strings. Without DLL changes the log carries
+proposals, proposers, delegate counts and outcomes, not individual votes.
+
+Consumer fallback: none. The `mp_vote` events are unrelated to the
+Congress, and no other event mentions it.
+
 ## Emit a city census, so razed cities stop haunting the data
 
 The Lekmod DLL fires no hook for a city being destroyed: `CvCity::
