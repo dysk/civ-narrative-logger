@@ -22,3 +22,18 @@ t.test("the built file logs through the whole stack when enabled", function()
   t.assert_match('"event":"session_started"', lines[1])
   t.assert_equal("function", type(handlers.CityCaptureComplete[1]))
 end)
+
+t.test("build.lua forwards every g.<Global> field the adapter reads", function()
+  local file = assert(io.open("src/adapter.lua", "r"))
+  local source = file:read("*a")
+  file:close()
+
+  local generated = build.generate()
+  local seen = {}
+  for name in source:gmatch("g%.([%u][%w_]*)") do
+    seen[name] = true
+  end
+  for name in pairs(seen) do
+    t.assert_match(name .. " = " .. name, generated)
+  end
+end)

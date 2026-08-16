@@ -32,6 +32,8 @@ _require("src.main").start({
   PreGame = PreGame,
   GameEvents = GameEvents,
   Modding = Modding,
+  YieldTypes = YieldTypes,
+  GameInfoTypes = GameInfoTypes,
   print = print,
 })
 ]]
