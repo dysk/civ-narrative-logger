@@ -4,3 +4,8 @@
 {"event":"unit_killed","killer":"Chile","turn":16,"unit":"UNIT_BARBARIAN_WARRIOR","victim":"Barbarians"}
 {"event":"teams_met","team_a":22,"team_a_civs":["Harappa"],"team_b":1,"team_b_civs":["Iroquois"],"turn":7}
 {"city_state":"Kampala","event":"city_state_ally_changed","new_ally":"Iroquois","turn":40}
+{"event":"congress_founded","host":"Chile","turn":90}
+{"event":"united_nations_formed","turn":220}
+{"event":"resolution_passed","resolution":"World's Fair","turn":150}
+{"event":"resolution_failed","resolution":"Embargo City-State","turn":160}
+{"event":"resolution_repealed","resolution":"World's Fair","turn":200}

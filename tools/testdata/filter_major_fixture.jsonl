@@ -9,3 +9,8 @@
 {"city_state":"Kampala","event":"city_state_ally_changed","new_ally":"Iroquois","turn":40}
 {"city_state":"Kampala","event":"city_state_ally_changed","new_ally":"Baku","turn":42}
 {"civ":"Barbarians","event":"unit_lost","turn":80,"unit":"UNIT_BARBARIAN_WARRIOR","x":14,"y":14}
+{"event":"congress_founded","host":"Chile","turn":90}
+{"event":"united_nations_formed","turn":220}
+{"event":"resolution_passed","resolution":"World's Fair","turn":150}
+{"event":"resolution_failed","resolution":"Embargo City-State","turn":160}
+{"event":"resolution_repealed","resolution":"World's Fair","turn":200}

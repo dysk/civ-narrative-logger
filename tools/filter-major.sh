@@ -9,6 +9,14 @@
 # minor-nation events that involve a major, e.g. a city-state's unit
 # killed_by a major, or a major's war against a city-state.
 #
+# World Congress events are kept unconditionally regardless of that rule:
+# they describe game-wide state (resolution outcomes, UN formation) that
+# carries no civ-name string at all - united_nations_formed has no civ
+# field, and resolution_passed/failed/repealed only carry the resolution's
+# display name, not a proposer or target civ. Every major already has a
+# stake in Congress by construction, so there's no relevance filter to
+# apply here.
+#
 # Usage:
 #   tools/filter-major.sh <events.jsonl> [--out file]
 #
@@ -46,7 +54,8 @@ fi
 MAJORS_JSON="$(jq -c '.players | map(.civ)' <<<"$FIRST_LINE")"
 
 FILTERED="$(jq -c --argjson majors "$MAJORS_JSON" \
-  'select([.. | strings] as $vals | any($majors[]; . as $m | $vals | index($m) != null))' \
+  'select((.event | test("^(congress_|resolution_|united_nations_formed)")) or
+          ([.. | strings] as $vals | any($majors[]; . as $m | $vals | index($m) != null)))' \
   "$EVENTS")"
 
 if [[ -n "$OUT" ]]; then
