@@ -84,6 +84,38 @@ proposals, proposers, delegate counts and outcomes, not individual votes.
 Consumer fallback: none. The `mp_vote` events are unrelated to the
 Congress, and no other event mentions it.
 
+## Emit domination and space-race victory progress in the snapshot
+
+The mod's own victory screen (`LEKMOD/Lua/tmp/ui/VotingSystem/
+VictoryProgress.lua.ignore`) shows the recipe for both, and every call it
+makes is exposed to Lua:
+
+- domination: iterate a player's cities and count those where
+  `IsOriginalMajorCapital()` is true, recording `GetOriginalOwner()` —
+  original capitals of majors only, exactly what the victory checks care
+  about (`CvLuaCity.cpp` exposes both).
+- space race: `Team:GetProjectCount()` per project — 1 for
+  `PROJECT_APOLLO_PROGRAM` once unlocked, then the four part counts
+  (`PROJECT_SS_BOOSTER` needs 3, `_SS_COCKPIT`, `_SS_STASIS_CHAMBER`,
+  `_SS_ENGINE` need 1 each). Parts count only once *added* to the
+  spaceship at the capital, and no hook fires on adding (`CvUnit.cpp`
+  kills the unit without a `CallHook`) — so this too is per-turn polling.
+
+Add to `civ.playerStats`: `capitals` (list of original owners of major
+capitals the player controls, own included) and `spaceship`
+(`{apollo, booster, cockpit, stasis_chamber, engine}`). Both are
+team-level facts repeated per player, which is fine — snapshots are
+per-player and teams of one are the common case.
+
+Consumer fallback: partial for domination — `city_captured` carries a
+`capital` flag, so capital control is reconstructable from events, but
+only by replaying every capture correctly. None for the space race:
+`unit_trained` shows a part being *built*, but a built part can be lost
+in transit — assembly is what wins, and no event carries it. Apollo and
+Manhattan already arrive as `project_completed` (the `CityCreated` hook
+covers city-built projects; spaceship parts are units, not projects,
+until assembled).
+
 ## Emit a city census, so razed cities stop haunting the data
 
 The Lekmod DLL fires no hook for a city being destroyed: `CvCity::
