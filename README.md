@@ -18,11 +18,14 @@ install and enablement steps.
 
 Complete and tested: event extractors (44 hooks, 45 record types), JSON
 encoder, error-safe logger wiring, the Civ 5 API adapter, the gated
-entry point, the single-file build (`luajit tools/build.lua`, output
-committed in `dist/`), the LEKMOD install path and the Lua.log →
-events.jsonl parser (`luajit tools/parser.lua`). Smoke-tested in
-single player on Windows and in multiplayer on a linux-wine pitboss
-server.
+entry point, two stateful per-turn pollers (city census, World
+Congress — see `docs/implemented-changes.md`) that register directly
+on `PlayerDoTurn` instead of going through the hook-extractor path,
+the single-file build (`luajit tools/build.lua`, output committed in
+`dist/`), the LEKMOD install path and the Lua.log → events.jsonl
+parser (`luajit tools/parser.lua`). Smoke-tested in single player on
+Windows and in multiplayer on a linux-wine pitboss server; the two
+pollers are unit-tested but not yet smoke-tested in a live game.
 
 ## Running the tests
 
@@ -45,6 +48,8 @@ the game globals as a parameter and is tested against fakes.
 | `src/extractors.lua` | GameEvents hook args → narrative records |
 | `src/adapter.lua` | the only seam to the Civ 5 Lua API |
 | `src/logger.lua` | subscribes extractors to hooks, streams JSON to a sink |
+| `src/census.lua` | per-player city census, emits `city_destroyed` |
+| `src/congress.lua` | per-turn World Congress poll, diffs it into events |
 | `src/json.lua` | minimal deterministic JSON encoder (sandbox has none) |
 | `src/main.lua` | entry point: opt-in gate, CIVLOG| print-sink, wiring |
 | `tests/` | test suite + ~70-line harness (`tests/run.lua`) |
@@ -52,6 +57,7 @@ the game globals as a parameter and is tested against fakes.
 | `dist/` | the generated game-loadable file (committed; rebuild after src changes) |
 | `docs/design-decisions.md` | every non-obvious choice and its why |
 | `docs/lekmod-gameevents.md` | authoritative hook list, extracted from the Lekmod DLL source |
+| `docs/implemented-changes.md` | changes made for the downstream analyst project, and why |
 
 ## Working on it
 

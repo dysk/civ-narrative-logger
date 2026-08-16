@@ -1,10 +1,10 @@
-# Planned changes
+# Implemented changes
 
-Changes the downstream analyst (`civ-strategy-analyst`) needs from the
-logger. None of them blocks that project: where a fallback exists it is a
-guess this repo could replace with a fact, and where none exists the
-analyst simply does without that analysis. Ordered by how much guessing
-they remove.
+Changes made for the downstream analyst (`civ-strategy-analyst`), which
+needed none of them to function: where a fallback existed it was a guess
+this repo could replace with a fact, and where none existed the analyst
+simply did without that analysis. Originally ordered by how much
+guessing each removed; all of the below have since been implemented.
 
 ## Emit tourism and cultural influence in the snapshot
 
