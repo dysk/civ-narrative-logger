@@ -32,6 +32,17 @@ local function fakePlayer(spec)
         return { GetUnitType = function() return spec.unitTypeId end }
       end
     end,
+    GetTourism = function() return spec.tourism end,
+    GetNumCivsInfluentialOn = function() return spec.civsInfluentialOn end,
+    GetInfluenceOn = function(_, otherId)
+      return spec.influenceOn and spec.influenceOn[otherId]
+    end,
+    GetInfluenceLevel = function(_, otherId)
+      return spec.influenceLevel and spec.influenceLevel[otherId]
+    end,
+    GetInfluenceTrend = function(_, otherId)
+      return spec.influenceTrend and spec.influenceTrend[otherId]
+    end,
   }
 end
 
@@ -58,6 +69,10 @@ local globals = {
       score = 1200, gold = 340, goldRate100 = 1250, science100 = 4800,
       culture = 30, faith = 10, happiness = 7, cities = 5,
       population = 41, might = 5600, militaryUnits = 14,
+      tourism = 45, civsInfluentialOn = 1,
+      influenceOn = { [1] = 320 },
+      influenceLevel = { [1] = 4 },
+      influenceTrend = { [1] = 1 },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
@@ -230,7 +245,19 @@ t.test("playerStats reads the full stat line of a living major civ", function()
     military_might = 5600,
     military_units = 14,
     techs = 24,
+    tourism = 45,
+    civs_influential_on = 1,
+    influence = {
+      { civ = "Rome", points = 320, level = "INFLUENCE_LEVEL_INFLUENTIAL",
+        trend = "INFLUENCE_TREND_RISING" },
+    },
   }, civ.playerStats(0))
+end)
+
+t.test("playerStats influence list excludes self, dead, minors and barbarians", function()
+  local stats = civ.playerStats(0)
+  t.assert_equal(1, #stats.influence)
+  t.assert_equal("Rome", stats.influence[1].civ)
 end)
 
 t.test("playerStats is nil for city-states", function()

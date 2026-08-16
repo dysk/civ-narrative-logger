@@ -160,9 +160,45 @@ function M.new(g)
     return typeOf(g.GameInfo.Units[unitTypeId])
   end
 
+  local influenceLevelNames = {
+    [-1] = "NO_INFLUENCE_LEVEL",
+    [0] = "INFLUENCE_LEVEL_UNKNOWN",
+    [1] = "INFLUENCE_LEVEL_EXOTIC",
+    [2] = "INFLUENCE_LEVEL_FAMILIAR",
+    [3] = "INFLUENCE_LEVEL_POPULAR",
+    [4] = "INFLUENCE_LEVEL_INFLUENTIAL",
+    [5] = "INFLUENCE_LEVEL_DOMINANT",
+  }
+
+  local influenceTrendNames = {
+    [-1] = "INFLUENCE_TREND_FALLING",
+    [0] = "INFLUENCE_TREND_STATIC",
+    [1] = "INFLUENCE_TREND_RISING",
+  }
+
+  local function isLivingMajor(p)
+    return p and p:IsAlive() and not p:IsMinorCiv() and not p:IsBarbarian()
+  end
+
+  local function influenceList(p, selfId)
+    local list = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local other = g.Players[i]
+      if i ~= selfId and isLivingMajor(other) then
+        table.insert(list, {
+          civ = other:GetCivilizationShortDescription(),
+          points = p:GetInfluenceOn(i),
+          level = influenceLevelNames[p:GetInfluenceLevel(i)],
+          trend = influenceTrendNames[p:GetInfluenceTrend(i)],
+        })
+      end
+    end
+    return list
+  end
+
   function civ.playerStats(playerId)
     local p = g.Players[playerId]
-    if not p or not p:IsAlive() or p:IsMinorCiv() or p:IsBarbarian() then
+    if not isLivingMajor(p) then
       return nil
     end
     return {
@@ -178,6 +214,9 @@ function M.new(g)
       military_might = p:GetMilitaryMight(),
       military_units = p:GetNumMilitaryUnits(),
       techs = g.Teams[p:GetTeam()]:GetTeamTechs():GetNumTechsKnown(),
+      tourism = p:GetTourism(),
+      civs_influential_on = p:GetNumCivsInfluentialOn(),
+      influence = influenceList(p, playerId),
     }
   end
 
