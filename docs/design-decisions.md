@@ -133,3 +133,23 @@ looking hooks stay out, checked against the Lekmod DLL call sites:
   move selection loop; pure volume with no narrative content.
 - `PlayerHappinessChanged` - safe but redundant: it pushes only the
   player id, and every per-turn snapshot already carries happiness.
+
+## Stateful pollers register directly on GameEvents, bypassing logger.attach
+
+The city census (`src/census.lua`) and World Congress poller
+(`src/congress.lua`) both need cross-turn state and may emit zero or
+more records per `PlayerDoTurn` firing - neither fits the extractors'
+contract of one hook, one pure record. Rather than extend that
+contract (and the purity guarantee of the other 44 extractors) to
+support arrays and state, each is its own module holding its state in
+a closure, wired with its own `g.GameEvents.PlayerDoTurn.Add(...)`
+call in `main.lua`. GameEvents supports multiple listeners per hook
+(that is the whole point of the system over the old override-style
+Events), so this coexists with `logger.attach`'s own listener on the
+same hook without conflict. The `GameEvents` test fake in
+`tests/fakes.lua` models this as a list per hook name, not a single
+overwritten slot.
+
+The congress poller additionally gates `congress_snapshot` to once per
+turn with a `civ.turn()` tracker, since `PlayerDoTurn` fires once per
+living player but the league is turn-global, not per-player.
