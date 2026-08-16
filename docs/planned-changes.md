@@ -1,9 +1,51 @@
 # Planned changes
 
 Changes the downstream analyst (`civ-strategy-analyst`) needs from the
-logger. Each one has a working fallback on the consumer side, so none of
-them blocks that project — but every fallback is a guess where this repo
-could supply a fact. Ordered by how much guessing they remove.
+logger. None of them blocks that project: where a fallback exists it is a
+guess this repo could replace with a fact, and where none exists the
+analyst simply does without that analysis. Ordered by how much guessing
+they remove.
+
+## Emit tourism and cultural influence in the snapshot
+
+The snapshot carries culture per turn but nothing about tourism, so
+cultural-victory progress is invisible: who pressures whom, how hard, and
+how close anyone is to winning. The Lekmod DLL exposes the full BNW
+culture API to Lua (`CvLuaPlayer.cpp`): `GetTourism()` (per-turn output),
+`GetInfluenceOn(other)` / `GetLastTurnInfluenceOn(other)` (accumulated
+influence, delta gives the rate), `GetInfluenceLevel(other)` (Exotic →
+Dominant), `GetInfluenceTrend(other)`, `GetTurnsToInfluential(other)`,
+and `GetNumCivsInfluentialOn()`.
+
+Add to `civ.playerStats`: `tourism`, `civs_influential_on`, and an
+`influence` list with one entry per living major opponent —
+`{civ, points, level, trend}`. That is the one snapshot field that grows
+with player count, but at 8–12 majors the record stays small.
+
+Consumer fallback: none. Culture per turn says nothing about tourism
+output or influence standings.
+
+## Extend the snapshot with the Demographics screen's inputs
+
+The in-game Demographics screen shows empire-wide figures players watch
+as trend indicators, and the snapshot carries only some of their inputs.
+The screen's own source (`LEKMOD/Lua/tmp/ui/Replays/Demographics.lua.ignore`
+in the mod repo) gives the formula for every row, and each function it
+calls is exposed to Lua: production and food are
+`CalculateTotalYield(YieldTypes.YIELD_PRODUCTION / YIELD_FOOD)`, GNP is
+`CalculateGrossGold()`, population-in-millions is `GetRealPopulation()`,
+land is `GetNumPlots() * 10000`, and approval, literacy and army are
+arithmetic over fields the snapshot already carries (`happiness`, `techs`,
+`military_might`).
+
+Add the four missing raw inputs to `civ.playerStats`: `production`,
+`food`, `gross_gold` (the existing `gold_per_turn` is net), and `plots`.
+The derived display figures stay on the consumer side — the raw values
+are what an analysis wants anyway.
+
+Consumer fallback: none for production, food and land — no event carries
+them. Gross gold, approval and literacy are partially derivable, but only
+by guessing at expenses and at the ruleset's total tech count.
 
 ## Emit a city census, so razed cities stop haunting the data
 
