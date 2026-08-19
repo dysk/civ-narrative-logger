@@ -58,6 +58,7 @@ the game globals as a parameter and is tested against fakes.
 | `docs/design-decisions.md` | every non-obvious choice and its why |
 | `docs/lekmod-gameevents.md` | authoritative hook list, extracted from the Lekmod DLL source |
 | `docs/implemented-changes.md` | changes made for the downstream analyst project, and why |
+| `docs/planned-changes.md` | changes the analyst still needs, and the evidence behind them |
 
 ## Working on it
 
