@@ -163,6 +163,52 @@ t.test("a proposal that just disappears has failed", function()
     eventNames(lines))
 end)
 
+-- A repeal proposal carries the ID of the resolution it targets (the DLL's
+-- CvRepealProposal takes pResolution->GetID()), so "is there an active
+-- resolution under this ID" answers the opposite question for a repeal than
+-- it does for an enactment.
+t.test("a repeal proposal whose target survives has failed", function()
+  local civ, state = fakeCiv()
+  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true }
+  state.snapshot = snapshot({
+    host = "Poland",
+    proposals = { [5] = proposal },
+    active_resolutions = { [5] = { id = 5, type = "RESOLUTION_EMBARGO" } },
+  })
+  local lines, sink = captureSink()
+  local poll = congress.new(civ, sink)
+  poll(0)
+  state.turn = 2
+  state.snapshot = snapshot({
+    host = "Poland",
+    active_resolutions = { [5] = { id = 5, type = "RESOLUTION_EMBARGO" } },
+  })
+  poll(0)
+  t.assert_deep_equal(
+    { "congress_founded", "congress_snapshot", "resolution_failed", "congress_snapshot" },
+    eventNames(lines))
+end)
+
+t.test("a repeal proposal that removes its target has passed", function()
+  local civ, state = fakeCiv()
+  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true }
+  state.snapshot = snapshot({
+    host = "Poland",
+    proposals = { [5] = proposal },
+    active_resolutions = { [5] = { id = 5, type = "RESOLUTION_EMBARGO" } },
+  })
+  local lines, sink = captureSink()
+  local poll = congress.new(civ, sink)
+  poll(0)
+  state.turn = 2
+  state.snapshot = snapshot({ host = "Poland" })
+  poll(0)
+  t.assert_deep_equal({
+    "congress_founded", "congress_snapshot",
+    "resolution_passed", "resolution_repealed", "congress_snapshot",
+  }, eventNames(lines))
+end)
+
 t.test("an active resolution that disappears has been repealed", function()
   local civ, state = fakeCiv()
   state.snapshot = snapshot({

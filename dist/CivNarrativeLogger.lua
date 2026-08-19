@@ -998,18 +998,21 @@ local function diffProposed(sink, turn, known, current)
   end
 end
 
+-- A repeal proposal carries the ID of the resolution it targets (the DLL's
+-- CvRepealProposal is constructed with pResolution->GetID()), so an active
+-- resolution still sitting under the proposal's ID means the opposite for a
+-- repeal than it does for an enactment: the target survived the vote.
 local function diffResolved(sink, turn, known, current, activeResolutions)
   for id, proposal in pairs(known) do
     if not current[id] then
-      if activeResolutions[id] then
-        sink(json.encode({
-          event = "resolution_passed", turn = turn, resolution = proposal.type,
-        }))
-      else
-        sink(json.encode({
-          event = "resolution_failed", turn = turn, resolution = proposal.type,
-        }))
-      end
+      local targetActive = activeResolutions[id] ~= nil
+      local passed = (proposal.repeal == true) ~= targetActive
+
+      sink(json.encode({
+        event = passed and "resolution_passed" or "resolution_failed",
+        turn = turn,
+        resolution = proposal.type,
+      }))
     end
   end
 end
