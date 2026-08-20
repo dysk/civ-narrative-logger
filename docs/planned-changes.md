@@ -46,14 +46,15 @@ This is a separate defect from the repeal inversion fixed in `8ed34c0`,
 and that fix does not address it: for a one-shot enactment the branch
 still lands on "no active resolution under this ID, therefore failed".
 
-Confirmed in a real game on the current build: a World's Fair that was
-enacted by the session was logged as
+Confirmed in a throwaway test game on the current build: a World's Fair
+that was enacted by the session was logged as
 
 ```json
 {"event":"resolution_failed","resolution":"RESOLUTION_WORLD_FAIR","turn":187}
 ```
 
-so the reasoning below no longer rests on the DLL source alone.
+so the reasoning below no longer rests on the DLL source alone. That log
+was neither kept nor imported, so it needs no repair.
 
 ### Known bad data
 
@@ -64,11 +65,6 @@ turn 101 by Babylon, recorded failed on turn 117
 (`examples/babylon-domination.jsonl` in the analyst repo, and the same
 game imported on both machines). Nothing in the log distinguishes the two
 cases; the signal was never captured.
-
-The confirmation game above is the exception: there the outcome is known
-from watching the session, so its turn-187 entry should be corrected to
-`resolution_passed` by hand rather than swept into `undetermined` by the
-repair script.
 
 ### The signals that exist
 
@@ -132,6 +128,5 @@ the API. Confirm in a real game: pass a World's Fair, then check the log
 shows `resolution_passed` and not `resolution_failed`, and that a
 `league_project`-derived decision fires on the poll after the session
 rather than several turns later when the project completes. The
-pre-change half of that experiment is done: an enacted World's Fair
-produced `resolution_failed` (see above), so the same game replayed
-after the change is a direct before/after comparison.
+pre-change half of that experiment is already done and is what the
+problem statement above quotes.
