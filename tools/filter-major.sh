@@ -12,7 +12,7 @@
 # World Congress events are kept unconditionally regardless of that rule:
 # they describe game-wide state (resolution outcomes, UN formation) that
 # carries no civ-name string at all - united_nations_formed has no civ
-# field, and resolution_passed/failed/repealed only carry the resolution's
+# field, and the resolution_* outcomes only carry the resolution's
 # display name, not a proposer or target civ. Every major already has a
 # stake in Congress by construction, so there's no relevance filter to
 # apply here.

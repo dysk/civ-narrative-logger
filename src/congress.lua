@@ -32,14 +32,41 @@ end
 -- CvRepealProposal is constructed with pResolution->GetID()), so an active
 -- resolution still sitting under the proposal's ID means the opposite for a
 -- repeal than it does for an enactment: the target survived the vote.
-local function diffResolved(sink, turn, known, current, activeResolutions)
-  for id, proposal in pairs(known) do
-    if not current[id] then
-      local targetActive = activeResolutions[id] ~= nil
-      local passed = (proposal.repeal == true) ~= targetActive
+local function ongoingOutcome(proposal, snapshot)
+  local targetActive = snapshot.active_resolutions[proposal.id] ~= nil
+  local passed = (proposal.repeal == true) ~= targetActive
+  return passed and "resolution_passed" or "resolution_failed"
+end
 
+local function projectRunning(projects, projectType)
+  local project = projects[projectType]
+  return project ~= nil and (project.active or project.complete)
+end
+
+-- A resolution with only one-time effects expires the moment it is enacted
+-- and never joins the active resolutions, so the test above would answer
+-- "failed" for it whatever the vote did. The one trace an enactment leaves
+-- is the league project it starts; without one there is nothing to read,
+-- and a project that was already running before the vote is a state the
+-- game does not allow (CvVotingClasses.cpp:2751) rather than a verdict.
+local function oneShotOutcome(proposal, known, snapshot)
+  local project = proposal.league_project
+  if not project then return "resolution_undetermined" end
+  if not projectRunning(snapshot.projects, project) then return "resolution_failed" end
+  if projectRunning(known.projects, project) then return "resolution_undetermined" end
+  return "resolution_passed"
+end
+
+local function outcome(proposal, known, snapshot)
+  if proposal.ongoing_effects then return ongoingOutcome(proposal, snapshot) end
+  return oneShotOutcome(proposal, known, snapshot)
+end
+
+local function diffResolved(sink, turn, known, snapshot)
+  for id, proposal in pairs(known.proposals) do
+    if not snapshot.proposals[id] then
       sink(json.encode({
-        event = passed and "resolution_passed" or "resolution_failed",
+        event = outcome(proposal, known, snapshot),
         turn = turn,
         resolution = proposal.type,
       }))
@@ -68,7 +95,7 @@ local function diff(sink, turn, known, snapshot)
     sink(json.encode({ event = "united_nations_formed", turn = turn }))
   end
   diffProposed(sink, turn, known.proposals, snapshot.proposals)
-  diffResolved(sink, turn, known.proposals, snapshot.proposals, snapshot.active_resolutions)
+  diffResolved(sink, turn, known, snapshot)
   diffRepealed(sink, turn, known.active_resolutions, snapshot.active_resolutions)
 end
 

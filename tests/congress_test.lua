@@ -26,6 +26,7 @@ end
 local function snapshot(fields)
   fields.proposals = fields.proposals or {}
   fields.active_resolutions = fields.active_resolutions or {}
+  fields.projects = fields.projects or {}
   fields.delegates = fields.delegates or {}
   fields.united_nations = fields.united_nations or false
   fields.votes_needed_for_diplo_victory = fields.votes_needed_for_diplo_victory or 14
@@ -117,7 +118,10 @@ t.test("a new proposal is reported", function()
   state.snapshot = snapshot({
     host = "Poland",
     proposals = {
-      [5] = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false },
+      [5] = {
+        id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false,
+        ongoing_effects = true,
+      },
     },
   })
   poll(0)
@@ -131,7 +135,10 @@ end)
 
 t.test("a proposal that becomes an active resolution has passed", function()
   local civ, state = fakeCiv()
-  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false }
+  local proposal = {
+    id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false,
+    ongoing_effects = true,
+  }
   state.snapshot = snapshot({ host = "Poland", proposals = { [5] = proposal } })
   local lines, sink = captureSink()
   local poll = congress.new(civ, sink)
@@ -150,7 +157,10 @@ end)
 
 t.test("a proposal that just disappears has failed", function()
   local civ, state = fakeCiv()
-  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false }
+  local proposal = {
+    id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false,
+    ongoing_effects = true,
+  }
   state.snapshot = snapshot({ host = "Poland", proposals = { [5] = proposal } })
   local lines, sink = captureSink()
   local poll = congress.new(civ, sink)
@@ -169,7 +179,10 @@ end)
 -- it does for an enactment.
 t.test("a repeal proposal whose target survives has failed", function()
   local civ, state = fakeCiv()
-  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true }
+  local proposal = {
+    id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true,
+    ongoing_effects = true,
+  }
   state.snapshot = snapshot({
     host = "Poland",
     proposals = { [5] = proposal },
@@ -191,7 +204,10 @@ end)
 
 t.test("a repeal proposal that removes its target has passed", function()
   local civ, state = fakeCiv()
-  local proposal = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true }
+  local proposal = {
+    id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = true,
+    ongoing_effects = true,
+  }
   state.snapshot = snapshot({
     host = "Poland",
     proposals = { [5] = proposal },
@@ -207,6 +223,74 @@ t.test("a repeal proposal that removes its target has passed", function()
     "congress_founded", "congress_snapshot",
     "resolution_passed", "resolution_repealed", "congress_snapshot",
   }, eventNames(lines))
+end)
+
+-- A resolution with only one-time effects never joins the active
+-- resolutions (CvLeague::DoEnactResolution, CvVotingClasses.cpp:6160), so
+-- the test above answers "failed" for it whatever the vote did. What an
+-- enactment does leave behind is the league project it starts.
+local worldFair = {
+  id = 5, type = "RESOLUTION_WORLD_FAIR", proposer = "Poland", repeal = false,
+  ongoing_effects = false, league_project = "LEAGUE_PROJECT_WORLD_FAIR",
+}
+local idle = { LEAGUE_PROJECT_WORLD_FAIR = { active = false, complete = false } }
+local underway = { LEAGUE_PROJECT_WORLD_FAIR = { active = true, complete = false } }
+local finished = { LEAGUE_PROJECT_WORLD_FAIR = { active = false, complete = true } }
+
+local function pollOneShot(before, after, proposal)
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({
+    host = "Poland", proposals = { [5] = proposal }, projects = before,
+  })
+  local lines, sink = captureSink()
+  local poll = congress.new(civ, sink)
+  poll(0)
+  state.turn = 2
+  state.snapshot = snapshot({ host = "Poland", projects = after })
+  poll(0)
+  return lines
+end
+
+t.test("a one-shot resolution whose project starts running has passed", function()
+  t.assert_deep_equal(
+    { "congress_founded", "congress_snapshot", "resolution_passed", "congress_snapshot" },
+    eventNames(pollOneShot(idle, underway, worldFair)))
+end)
+
+t.test("a one-shot resolution whose project already finished has passed", function()
+  t.assert_deep_equal(
+    { "congress_founded", "congress_snapshot", "resolution_passed", "congress_snapshot" },
+    eventNames(pollOneShot(idle, finished, worldFair)))
+end)
+
+t.test("a one-shot resolution whose project never starts has failed", function()
+  t.assert_deep_equal(
+    { "congress_founded", "congress_snapshot", "resolution_failed", "congress_snapshot" },
+    eventNames(pollOneShot(idle, idle, worldFair)))
+end)
+
+-- The game refuses to put a project resolution to the vote while its
+-- project is already underway or complete (CvVotingClasses.cpp:2751), so
+-- a project that was running before the vote leaves the vote unexplained
+-- rather than decided.
+t.test("a one-shot resolution whose project was already running is undetermined", function()
+  t.assert_deep_equal({
+    "congress_founded", "congress_snapshot",
+    "resolution_undetermined", "congress_snapshot",
+  }, eventNames(pollOneShot(underway, underway, worldFair)))
+end)
+
+t.test("a one-shot resolution with no project leaves no trace to read", function()
+  local lines = pollOneShot(idle, idle, {
+    id = 5, type = "RESOLUTION_CHANGE_LEAGUE_HOST", proposer = "Poland",
+    repeal = false, ongoing_effects = false,
+  })
+  t.assert_deep_equal({
+    "congress_founded", "congress_snapshot",
+    "resolution_undetermined", "congress_snapshot",
+  }, eventNames(lines))
+  t.assert_match('"resolution":"RESOLUTION_CHANGE_LEAGUE_HOST"', lines[3])
+  t.assert_match('"turn":2', lines[3])
 end)
 
 t.test("an active resolution that disappears has been repealed", function()

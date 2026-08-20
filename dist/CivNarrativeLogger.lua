@@ -304,13 +304,67 @@ function M.new(g)
     return typeOf(g.GameInfo.Resolutions[id])
   end
 
+  -- The columns CvResolutionEffects::HasOngoingEffects tests
+  -- (CvVotingClasses.cpp:245). A resolution with none of them set expires
+  -- the moment it is enacted and never joins the active resolutions, so
+  -- its outcome cannot be read from that list. Read here rather than
+  -- hardcoded as a list of resolution types, which the mod can extend.
+  local ongoingEffectColumns = {
+    "GoldPerTurn",
+    "ResourceQuantity",
+    "EmbargoCityStates",
+    "EmbargoPlayer",
+    "NoResourceHappiness",
+    "UnitMaintenanceGoldPercent",
+    "MemberDiscoveredTechMod",
+    "CulturePerWonder",
+    "CulturePerNaturalWonder",
+    "NoTrainingNuclearWeapons",
+    "VotesForFollowingReligion",
+    "HolyCityTourism",
+    "ReligionSpreadStrengthMod",
+    "VotesForFollowingIdeology",
+    "OtherIdeologyRebellionMod",
+    "ArtsyGreatPersonRateMod",
+    "ScienceyGreatPersonRateMod",
+    "GreatPersonTileImprovementCulture",
+    "LandmarkCulture",
+  }
+
+  -- Whether the game hands a boolean column back as a boolean or as the
+  -- 0/1 it is stored as is not worth depending on.
+  local function isSet(value)
+    return value ~= nil and value ~= false and value ~= 0
+  end
+
+  local function hasOngoingEffects(row)
+    for _, column in ipairs(ongoingEffectColumns) do
+      if isSet(row[column]) then return true end
+    end
+    return false
+  end
+
   local function proposalRecord(p, repeal)
+    local row = g.GameInfo.Resolutions[p.Type]
     return {
       id = p.ID,
-      type = resolutionType(p.Type),
+      type = typeOf(row),
       proposer = civ.civName(p.ProposalPlayer),
       repeal = repeal,
+      ongoing_effects = row ~= nil and hasOngoingEffects(row),
+      league_project = row and row.LeagueProjectEnabled or nil,
     }
+  end
+
+  local function leagueProjects(league)
+    local projects = {}
+    for row in g.GameInfo.LeagueProjects() do
+      projects[row.Type] = {
+        active = league:IsProjectActive(row.ID),
+        complete = league:IsProjectComplete(row.ID),
+      }
+    end
+    return projects
   end
 
   local function congressDelegates(league)
@@ -353,6 +407,7 @@ function M.new(g)
       delegates = congressDelegates(league),
       proposals = proposals,
       active_resolutions = activeResolutions,
+      projects = leagueProjects(league),
     }
   end
 
@@ -1002,14 +1057,41 @@ end
 -- CvRepealProposal is constructed with pResolution->GetID()), so an active
 -- resolution still sitting under the proposal's ID means the opposite for a
 -- repeal than it does for an enactment: the target survived the vote.
-local function diffResolved(sink, turn, known, current, activeResolutions)
-  for id, proposal in pairs(known) do
-    if not current[id] then
-      local targetActive = activeResolutions[id] ~= nil
-      local passed = (proposal.repeal == true) ~= targetActive
+local function ongoingOutcome(proposal, snapshot)
+  local targetActive = snapshot.active_resolutions[proposal.id] ~= nil
+  local passed = (proposal.repeal == true) ~= targetActive
+  return passed and "resolution_passed" or "resolution_failed"
+end
 
+local function projectRunning(projects, projectType)
+  local project = projects[projectType]
+  return project ~= nil and (project.active or project.complete)
+end
+
+-- A resolution with only one-time effects expires the moment it is enacted
+-- and never joins the active resolutions, so the test above would answer
+-- "failed" for it whatever the vote did. The one trace an enactment leaves
+-- is the league project it starts; without one there is nothing to read,
+-- and a project that was already running before the vote is a state the
+-- game does not allow (CvVotingClasses.cpp:2751) rather than a verdict.
+local function oneShotOutcome(proposal, known, snapshot)
+  local project = proposal.league_project
+  if not project then return "resolution_undetermined" end
+  if not projectRunning(snapshot.projects, project) then return "resolution_failed" end
+  if projectRunning(known.projects, project) then return "resolution_undetermined" end
+  return "resolution_passed"
+end
+
+local function outcome(proposal, known, snapshot)
+  if proposal.ongoing_effects then return ongoingOutcome(proposal, snapshot) end
+  return oneShotOutcome(proposal, known, snapshot)
+end
+
+local function diffResolved(sink, turn, known, snapshot)
+  for id, proposal in pairs(known.proposals) do
+    if not snapshot.proposals[id] then
       sink(json.encode({
-        event = passed and "resolution_passed" or "resolution_failed",
+        event = outcome(proposal, known, snapshot),
         turn = turn,
         resolution = proposal.type,
       }))
@@ -1038,7 +1120,7 @@ local function diff(sink, turn, known, snapshot)
     sink(json.encode({ event = "united_nations_formed", turn = turn }))
   end
   diffProposed(sink, turn, known.proposals, snapshot.proposals)
-  diffResolved(sink, turn, known.proposals, snapshot.proposals, snapshot.active_resolutions)
+  diffResolved(sink, turn, known, snapshot)
   diffRepealed(sink, turn, known.active_resolutions, snapshot.active_resolutions)
 end
 
