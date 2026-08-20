@@ -157,3 +157,72 @@ the command line and is simply wrong if the operator misremembers.
 
 Consumer fallback: a `--lekmod-version` flag at import time, which is
 where the guessing happens.
+
+## Report the outcome of one-shot resolutions, or admit it is unknown
+
+`diffResolved` decided whether a vanished proposal passed by asking
+whether an active resolution now sat under its ID. That question only
+has an answer for resolutions with ongoing effects. `CvLeague::
+DoEnactResolution` (`CvVotingClasses.cpp:6160`) reads:
+
+```cpp
+// Active Resolutions with only one-time effects immediately expire
+if (resolution.HasOngoingEffects())
+{
+    m_vActiveResolutions.push_back(resolution);
+}
+```
+
+A resolution whose effects are all one-time never joins
+`m_vActiveResolutions`, so the ID test answered "no" whatever the vote
+did — and the logger wrote `resolution_failed` for a resolution that
+passed. Classifying every resolution in LEKMOD 34.15 by the column list
+in `CvResolutionEffects::HasOngoingEffects` (`CvVotingClasses.cpp:245`)
+gives five affected types out of seventeen:
+
+| Resolution | Why it is one-shot | Recoverable signal |
+|---|---|---|
+| `RESOLUTION_WORLD_FAIR` | `LeagueProjectEnabled` only | project becomes active |
+| `RESOLUTION_WORLD_GAMES` | `LeagueProjectEnabled` only | project becomes active |
+| `RESOLUTION_INTERNATIONAL_SPACE_STATION` | `LeagueProjectEnabled` only | project becomes active |
+| `RESOLUTION_CHANGE_LEAGUE_HOST` | `ChangeLeagueHost` only | host change, ambiguous |
+| `RESOLUTION_DIPLOMATIC_VICTORY` | `DiplomaticVictory` only | the game ends |
+
+The last two also carry `NoProposalByPlayer=true` — they are the
+automatic proposals of a special session rather than anything a player
+chose. This was a separate defect from the repeal inversion fixed in
+`8ed34c0`, which did not address it.
+
+The adapter now classifies resolutions from `GameInfo.Resolutions` using
+the same columns `HasOngoingEffects` tests, rather than hardcoding five
+IDs the mod is free to change, and `congressSnapshot()` carries one
+`{active, complete}` entry per row of `GameInfo.LeagueProjects`.
+`diffResolved` reads a decision table instead of a single test: a
+resolution with ongoing effects keeps the active-resolution test; a
+one-shot with a league project passed iff that project became active or
+complete this poll; a one-shot without one is `resolution_undetermined`,
+a new event saying the vote concluded with a result nothing can read.
+Emitting nothing would have been cheaper, but the analyst renders a
+missing outcome as "pending", which is a different and equally false
+claim about a vote that certainly happened.
+
+Both halves of the real-game experiment were run: the same save,
+replayed on each build, reported the same World's Fair as
+`resolution_failed` and then as `resolution_passed`, both on turn 187.
+The identical turn settles the second question — the decision is taken
+on the poll right after the session, not several turns later when the
+project completes, so `IsProjectActive` answers true as soon as
+`DoEnactResolution` has called `StartProject`. A rejected project
+resolution was not replayed; that branch is the one the pre-change build
+already exercised for every outcome.
+
+Every `resolution_failed` recorded for one of the five types before this
+change is unreliable. In the one game we hold it was Babylon's World's
+Fair, proposed turn 101 and recorded failed on turn 117, in
+`examples/babylon-domination.jsonl` and the same game imported on both
+machines. The log cannot distinguish the two cases, but the player
+remembers the vote carrying, so the record was corrected to
+`resolution_passed` rather than left unknown.
+
+Consumer fallback: none. A passed one-shot resolution left no trace in
+any event the analyst received.
