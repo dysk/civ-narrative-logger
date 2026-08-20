@@ -248,13 +248,67 @@ function M.new(g)
     return typeOf(g.GameInfo.Resolutions[id])
   end
 
+  -- The columns CvResolutionEffects::HasOngoingEffects tests
+  -- (CvVotingClasses.cpp:245). A resolution with none of them set expires
+  -- the moment it is enacted and never joins the active resolutions, so
+  -- its outcome cannot be read from that list. Read here rather than
+  -- hardcoded as a list of resolution types, which the mod can extend.
+  local ongoingEffectColumns = {
+    "GoldPerTurn",
+    "ResourceQuantity",
+    "EmbargoCityStates",
+    "EmbargoPlayer",
+    "NoResourceHappiness",
+    "UnitMaintenanceGoldPercent",
+    "MemberDiscoveredTechMod",
+    "CulturePerWonder",
+    "CulturePerNaturalWonder",
+    "NoTrainingNuclearWeapons",
+    "VotesForFollowingReligion",
+    "HolyCityTourism",
+    "ReligionSpreadStrengthMod",
+    "VotesForFollowingIdeology",
+    "OtherIdeologyRebellionMod",
+    "ArtsyGreatPersonRateMod",
+    "ScienceyGreatPersonRateMod",
+    "GreatPersonTileImprovementCulture",
+    "LandmarkCulture",
+  }
+
+  -- Whether the game hands a boolean column back as a boolean or as the
+  -- 0/1 it is stored as is not worth depending on.
+  local function isSet(value)
+    return value ~= nil and value ~= false and value ~= 0
+  end
+
+  local function hasOngoingEffects(row)
+    for _, column in ipairs(ongoingEffectColumns) do
+      if isSet(row[column]) then return true end
+    end
+    return false
+  end
+
   local function proposalRecord(p, repeal)
+    local row = g.GameInfo.Resolutions[p.Type]
     return {
       id = p.ID,
-      type = resolutionType(p.Type),
+      type = typeOf(row),
       proposer = civ.civName(p.ProposalPlayer),
       repeal = repeal,
+      ongoing_effects = row ~= nil and hasOngoingEffects(row),
+      league_project = row and row.LeagueProjectEnabled or nil,
     }
+  end
+
+  local function leagueProjects(league)
+    local projects = {}
+    for row in g.GameInfo.LeagueProjects() do
+      projects[row.Type] = {
+        active = league:IsProjectActive(row.ID),
+        complete = league:IsProjectComplete(row.ID),
+      }
+    end
+    return projects
   end
 
   local function congressDelegates(league)
@@ -297,6 +351,7 @@ function M.new(g)
       delegates = congressDelegates(league),
       proposals = proposals,
       active_resolutions = activeResolutions,
+      projects = leagueProjects(league),
     }
   end
 

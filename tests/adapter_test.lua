@@ -384,8 +384,39 @@ local function fakeLeague(spec)
     GetEnactProposals = function() return spec.enactProposals or {} end,
     GetRepealProposals = function() return spec.repealProposals or {} end,
     GetActiveResolutions = function() return spec.activeResolutions or {} end,
+    IsProjectActive = function(_, projectId)
+      return (spec.activeProjects or {})[projectId] == true
+    end,
+    IsProjectComplete = function(_, projectId)
+      return (spec.completeProjects or {})[projectId] == true
+    end,
   }
 end
+
+-- GameInfo tables are called to iterate them: for row in GameInfo.X() do
+local function fakeGameInfoTable(rows)
+  return setmetatable(rows, {
+    __call = function()
+      local i = 0
+      return function()
+        i = i + 1
+        return rows[i]
+      end
+    end,
+  })
+end
+
+local leagueProjects = fakeGameInfoTable({
+  { ID = 12, Type = "LEAGUE_PROJECT_WORLD_FAIR" },
+  { ID = 13, Type = "LEAGUE_PROJECT_INTERNATIONAL_GAMES" },
+  { ID = 14, Type = "LEAGUE_PROJECT_INTERNATIONAL_SPACE_STATION" },
+})
+
+local noProjectsRunning = {
+  LEAGUE_PROJECT_WORLD_FAIR = { active = false, complete = false },
+  LEAGUE_PROJECT_INTERNATIONAL_GAMES = { active = false, complete = false },
+  LEAGUE_PROJECT_INTERNATIONAL_SPACE_STATION = { active = false, complete = false },
+}
 
 local congressGlobals
 congressGlobals = {
@@ -396,7 +427,8 @@ congressGlobals = {
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = globals.Players,
   GameInfo = {
-    Resolutions = { [5] = { Type = "RESOLUTION_EMBARGO" } },
+    Resolutions = { [5] = { Type = "RESOLUTION_EMBARGO", EmbargoPlayer = 1 } },
+    LeagueProjects = leagueProjects,
   },
 }
 local congressCiv = adapter.new(congressGlobals)
@@ -427,8 +459,108 @@ t.test("congressSnapshot reads host, delegates and proposals", function()
       { civ = "Rome", votes = 2, core_votes = 1 },
     },
     proposals = {
-      [5] = { id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false },
+      [5] = {
+        id = 5, type = "RESOLUTION_EMBARGO", proposer = "Poland", repeal = false,
+        ongoing_effects = true,
+      },
     },
     active_resolutions = {},
+    projects = noProjectsRunning,
   }, congressCiv.congressSnapshot())
+end)
+
+-- Whether a resolution keeps existing after enactment decides how its
+-- outcome can be observed at all: CvLeague::DoEnactResolution only pushes
+-- a resolution onto m_vActiveResolutions when HasOngoingEffects() is true.
+-- These are the columns that function reads (CvVotingClasses.cpp:245).
+local ongoingEffectColumns = {
+  "GoldPerTurn",
+  "ResourceQuantity",
+  "EmbargoCityStates",
+  "EmbargoPlayer",
+  "NoResourceHappiness",
+  "UnitMaintenanceGoldPercent",
+  "MemberDiscoveredTechMod",
+  "CulturePerWonder",
+  "CulturePerNaturalWonder",
+  "NoTrainingNuclearWeapons",
+  "VotesForFollowingReligion",
+  "HolyCityTourism",
+  "ReligionSpreadStrengthMod",
+  "VotesForFollowingIdeology",
+  "OtherIdeologyRebellionMod",
+  "ArtsyGreatPersonRateMod",
+  "ScienceyGreatPersonRateMod",
+  "GreatPersonTileImprovementCulture",
+  "LandmarkCulture",
+}
+
+local function proposalFor(resolutionRow)
+  congressGlobals.GameInfo.Resolutions[7] = resolutionRow
+  congressGlobals._league = fakeLeague({
+    host = 0,
+    votes = { [0] = 5, [1] = 2 },
+    coreVotes = { [0] = 1, [1] = 1 },
+    enactProposals = { { ID = 1, Type = 7, ProposalPlayer = 0 } },
+  })
+  return congressCiv.congressSnapshot().proposals[1]
+end
+
+local function ongoingEffectsPerColumn(value)
+  local result = {}
+  for _, column in ipairs(ongoingEffectColumns) do
+    local row = { Type = "RESOLUTION_UNDER_TEST" }
+    row[column] = value
+    result[column] = proposalFor(row).ongoing_effects
+  end
+  return result
+end
+
+local function everyColumn(value)
+  local expected = {}
+  for _, column in ipairs(ongoingEffectColumns) do expected[column] = value end
+  return expected
+end
+
+t.test("a set effect column makes a resolution one with ongoing effects", function()
+  t.assert_deep_equal(everyColumn(true), ongoingEffectsPerColumn(1))
+end)
+
+t.test("effect columns set to zero leave a resolution one-shot", function()
+  t.assert_deep_equal(everyColumn(false), ongoingEffectsPerColumn(0))
+end)
+
+t.test("effect columns read as booleans count the same as 0 and 1", function()
+  t.assert_deep_equal(everyColumn(true), ongoingEffectsPerColumn(true))
+  t.assert_deep_equal(everyColumn(false), ongoingEffectsPerColumn(false))
+end)
+
+t.test("a resolution missing the effect columns entirely is one-shot", function()
+  t.assert_equal(false, proposalFor({ Type = "RESOLUTION_UNDER_TEST" }).ongoing_effects)
+end)
+
+t.test("a World's Fair is one-shot and names the project it enables", function()
+  local proposal = proposalFor({
+    Type = "RESOLUTION_WORLD_FAIR",
+    LeagueProjectEnabled = "LEAGUE_PROJECT_WORLD_FAIR",
+  })
+  t.assert_deep_equal({
+    id = 1, type = "RESOLUTION_WORLD_FAIR", proposer = "Poland", repeal = false,
+    ongoing_effects = false, league_project = "LEAGUE_PROJECT_WORLD_FAIR",
+  }, proposal)
+end)
+
+t.test("congressSnapshot reports which league projects are running", function()
+  congressGlobals._league = fakeLeague({
+    host = 0,
+    votes = { [0] = 5, [1] = 2 },
+    coreVotes = { [0] = 1, [1] = 1 },
+    activeProjects = { [12] = true },
+    completeProjects = { [13] = true },
+  })
+  t.assert_deep_equal({
+    LEAGUE_PROJECT_WORLD_FAIR = { active = true, complete = false },
+    LEAGUE_PROJECT_INTERNATIONAL_GAMES = { active = false, complete = true },
+    LEAGUE_PROJECT_INTERNATIONAL_SPACE_STATION = { active = false, complete = false },
+  }, congressCiv.congressSnapshot().projects)
 end)
