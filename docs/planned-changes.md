@@ -54,7 +54,12 @@ that was enacted by the session was logged as
 ```
 
 so the reasoning below no longer rests on the DLL source alone. That log
-was neither kept nor imported, so it needs no repair.
+was neither kept nor imported, so it needs no repair. Replaying the same
+save on the fixed logger turns that line into
+
+```json
+{"event":"resolution_passed","resolution":"RESOLUTION_WORLD_FAIR","turn":187}
+```
 
 ### Known bad data
 
@@ -124,9 +129,17 @@ script.
 ### Verification
 
 The suite cannot prove this one, because the fakes are our own model of
-the API. Confirm in a real game: pass a World's Fair, then check the log
-shows `resolution_passed` and not `resolution_failed`, and that a
-`league_project`-derived decision fires on the poll after the session
-rather than several turns later when the project completes. The
-pre-change half of that experiment is already done and is what the
-problem statement above quotes.
+the API. Both halves of the real-game experiment are done, and are the
+two lines the problem statement quotes: the same save, replayed on each
+build, reports the same World's Fair as failed and then as passed.
+
+The turn settles the second question the experiment had to answer. Both
+lines carry turn 187 — the turn the proposal vanished — so the decision
+is taken on the poll right after the session, not several turns later
+when the project completes. `IsProjectActive` therefore answers true as
+soon as `DoEnactResolution` has called `StartProject`, as read from the
+source.
+
+A rejected project resolution was not replayed. The failing branch is
+the one the pre-change build already exercised for every outcome, so it
+is the safer half to leave to the suite.
