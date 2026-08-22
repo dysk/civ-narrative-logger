@@ -16,16 +16,18 @@ install and enablement steps.
 
 ## Status
 
-Complete and tested: event extractors (44 hooks, 45 record types), JSON
+Complete and tested: event extractors (45 hooks, 46 record types), JSON
 encoder, error-safe logger wiring, the Civ 5 API adapter, the gated
-entry point, two stateful per-turn pollers (city census, World
-Congress — see `docs/implemented-changes.md`) that register directly
-on `PlayerDoTurn` instead of going through the hook-extractor path,
-the single-file build (`luajit tools/build.lua`, output committed in
-`dist/`), the LEKMOD install path and the Lua.log → events.jsonl
+entry point, three stateful per-turn pollers (city census, World
+Congress, pairwise diplomacy) that register directly on `PlayerDoTurn`
+instead of going through the hook-extractor path,
+the one-shot victory watcher on `GameCoreTestVictory`, the single-file
+build (`luajit tools/build.lua`, output committed in `dist/`),
+the LEKMOD install path and the Lua.log → events.jsonl
 parser (`luajit tools/parser.lua`). Smoke-tested in single player on
-Windows and in multiplayer on a linux-wine pitboss server; the two
-pollers are unit-tested but not yet smoke-tested in a live game.
+Windows and in multiplayer on a linux-wine pitboss server; the three
+pollers and the victory watcher are unit-tested but not yet
+smoke-tested in a live game.
 
 ## Running the tests
 
@@ -50,6 +52,8 @@ the game globals as a parameter and is tested against fakes.
 | `src/logger.lua` | subscribes extractors to hooks, streams JSON to a sink |
 | `src/census.lua` | per-player city census, emits `city_destroyed` |
 | `src/congress.lua` | per-turn World Congress poll, diffs it into events |
+| `src/victory.lua` | one-shot `game_ended` watcher on `GameCoreTestVictory` |
+| `src/diplomacy.lua` | per-turn poll of the state between every pair of majors |
 | `src/json.lua` | minimal deterministic JSON encoder (sandbox has none) |
 | `src/main.lua` | entry point: opt-in gate, CIVLOG| print-sink, wiring |
 | `tests/` | test suite + ~70-line harness (`tests/run.lua`) |
@@ -57,8 +61,10 @@ the game globals as a parameter and is tested against fakes.
 | `dist/` | the generated game-loadable file (committed; rebuild after src changes) |
 | `docs/design-decisions.md` | every non-obvious choice and its why |
 | `docs/lekmod-gameevents.md` | authoritative hook list, extracted from the Lekmod DLL source |
+| `docs/lekmod-lua-api.md` | what the DLL's Lua bindings expose to a poller, and the dead ends |
 | `docs/implemented-changes.md` | changes made for the downstream analyst project, and why |
 | `docs/planned-changes.md` | changes the analyst still needs, and the evidence behind them |
+| `docs/candidate-events.md` | facts the game exposes that we do not log yet, with the API evidence |
 
 ## Working on it
 
