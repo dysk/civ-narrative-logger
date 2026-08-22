@@ -172,3 +172,38 @@ The DLL's own comment at that call site says the hook exists "to allow a
 Lua script to set the victory state". Our handler therefore returns
 nothing, deliberately and under test: a return value here would not just
 pollute the log, it could decide the game.
+
+## The diplomacy poller reads five facts, and the reasons for the rest
+
+Only war and peace announce themselves (`DeclareWar`, `MakePeace`).
+Everything else two players can agree on is state nobody pushes, so
+`src/diplomacy.lua` reads it for every ordered pair of living majors
+once per turn and diffs it. What it does *not* read matters as much:
+
+- war and peace stay with their hooks; polling them would duplicate
+  records that already exist.
+- research agreements cannot happen in Lekmod. Every one of the 82
+  technologies sets `ResearchAgreementTradingAllowed` to false
+  (`LEKMOD/Override/CIV5Units.xml`), so `IsHasResearchAgreement` can
+  never turn true and the read would be pure cost.
+- denouncement is unreachable in an all-human game. Its only Lua entry
+  point is `Player:DoForceDenounce` (`CvLuaPlayer.cpp:8733`), called
+  from `DiscussionDialog.lua` - the AI leader screen. The human-to-human
+  diplomacy screen has no such button. Add `IsDenouncedPlayer` back to
+  `diplomacyPair` if a game ever includes AI majors; the poller's
+  one-sided path already fits it.
+- the counters (`GetNumTurnsAtWar`, `GetDoFCounter`, timers) are
+  per-turn numbers, not events, and belong in a snapshot if they are
+  ever wanted.
+
+Which facts are mutual is a DLL question, not a modelling preference.
+The DLL sets DoF on both players (`CvDiplomacyAI.cpp:11038-11039`), as
+it does defensive pacts and trade agreements, so those are one fact
+about a pair: they are diffed from the lower player id only and logged
+with a `civs` array. Open borders and embassies belong to the side that
+granted them and are logged per direction with `civ`/`other_civ`.
+
+The first poll of a session records a baseline and emits nothing, the
+way the city census does. Re-announcing every standing friendship on
+each reload is exactly the defect `congress_founded` has, and this
+poller would multiply it by every pair.

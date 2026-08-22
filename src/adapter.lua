@@ -259,6 +259,36 @@ function M.new(g)
   end
 
 
+  -- Friendship is a player fact, the treaties and open borders are team
+  -- facts, so one pair entry is assembled from both. Read for every
+  -- ordered pair: open borders and embassies belong to the granting
+  -- side, and the poller decides which facts are mutual.
+  local function diplomacyPair(a, b)
+    local teamA, teamB = g.Teams[g.Players[a]:GetTeam()], g.Players[b]:GetTeam()
+    return {
+      dof = g.Players[a]:IsDoF(b),
+      open_borders = teamA:IsAllowsOpenBordersToTeam(teamB),
+      embassy = teamA:HasEmbassyAtTeam(teamB),
+      defensive_pact = teamA:IsDefensivePact(teamB),
+      trade_agreement = teamA:IsHasTradeAgreement(teamB),
+    }
+  end
+
+  function civ.diplomacySnapshot()
+    local snapshot = {}
+    for a = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[a]) then
+        snapshot[a] = {}
+        for b = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+          if a ~= b and isLivingMajor(g.Players[b]) then
+            snapshot[a][b] = diplomacyPair(a, b)
+          end
+        end
+      end
+    end
+    return snapshot
+  end
+
   local function resolutionType(id)
     return typeOf(g.GameInfo.Resolutions[id])
   end

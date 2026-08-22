@@ -7,6 +7,7 @@ local logger = require("src.logger")
 local census = require("src.census")
 local congress = require("src.congress")
 local victory = require("src.victory")
+local diplomacy = require("src.diplomacy")
 
 local M = {}
 
@@ -28,6 +29,7 @@ function M.start(g)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
 

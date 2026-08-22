@@ -596,3 +596,65 @@ t.test("victory reports the winning team, its civs and the victory type", functi
     winning_turn = 297,
   }, victoryCiv.victory())
 end)
+
+-- Friendship hangs off the player (CvLuaPlayer.cpp), the treaties and
+-- open borders off the team (CvLuaTeam.cpp), so one pair entry is
+-- assembled from both.
+local function diploPlayer(spec)
+  return {
+    IsAlive = function() return spec.alive ~= false end,
+    IsMinorCiv = function() return spec.minor == true end,
+    IsBarbarian = function() return spec.barbarian == true end,
+    GetTeam = function() return spec.team end,
+    GetCivilizationShortDescription = function() return spec.civ end,
+    IsDoF = function(_, other) return (spec.dof or {})[other] == true end,
+  }
+end
+
+local function diploTeam(spec)
+  return {
+    IsAllowsOpenBordersToTeam = function(_, other) return (spec.openBorders or {})[other] == true end,
+    HasEmbassyAtTeam = function(_, other) return (spec.embassy or {})[other] == true end,
+    IsDefensivePact = function(_, other) return (spec.defensivePact or {})[other] == true end,
+    IsHasTradeAgreement = function(_, other) return (spec.tradeAgreement or {})[other] == true end,
+  }
+end
+
+local diplomacyGlobals = {
+  Game = { GetGameTurn = function() return 142 end },
+  GameDefines = { MAX_CIV_PLAYERS = 5 },
+  Players = {
+    [0] = diploPlayer({ civ = "Poland", team = 0, dof = { [1] = true } }),
+    [1] = diploPlayer({ civ = "Rome", team = 1, dof = { [0] = true } }),
+    [2] = diploPlayer({ civ = "Carthage", team = 2, alive = false }),
+    [3] = diploPlayer({ civ = "Venice", team = 3, minor = true }),
+    [4] = diploPlayer({ civ = "Barbarians", team = 4, barbarian = true }),
+  },
+  Teams = {
+    [0] = diploTeam({ openBorders = { [1] = true }, defensivePact = { [1] = true } }),
+    [1] = diploTeam({ embassy = { [0] = true }, defensivePact = { [0] = true } }),
+  },
+}
+local diplomacyCiv = adapter.new(diplomacyGlobals)
+
+t.test("diplomacySnapshot covers only living majors, in both directions", function()
+  local snapshot = diplomacyCiv.diplomacySnapshot()
+  local seen = {}
+  for a, others in pairs(snapshot) do
+    for b in pairs(others) do table.insert(seen, a .. "->" .. b) end
+  end
+  table.sort(seen)
+  t.assert_deep_equal({ "0->1", "1->0" }, seen)
+end)
+
+t.test("diplomacySnapshot reads friendship from the player, treaties from the team", function()
+  t.assert_deep_equal({ dof = true, open_borders = false, embassy = true,
+    defensive_pact = true, trade_agreement = false },
+    diplomacyCiv.diplomacySnapshot()[1][0])
+end)
+
+t.test("diplomacySnapshot reads open borders as granted by the reading side", function()
+  t.assert_deep_equal({ dof = true, open_borders = true, embassy = false,
+    defensive_pact = true, trade_agreement = false },
+    diplomacyCiv.diplomacySnapshot()[0][1])
+end)

@@ -9,6 +9,7 @@ local files = {
   "tests.census_test",
   "tests.congress_test",
   "tests.victory_test",
+  "tests.diplomacy_test",
   "tests.main_test",
   "tests.build_test",
   "tests.parser_test",

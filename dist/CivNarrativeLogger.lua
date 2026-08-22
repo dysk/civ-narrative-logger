@@ -300,6 +300,51 @@ function M.new(g)
     return roster
   end
 
+  -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
+  -- game sets them together (CvGame::setWinner), so the team alone
+  -- answers "is it over".
+  function civ.victory()
+    local team = g.Game.GetWinner()
+    if not team or team < 0 then return nil end
+    return {
+      winner_team = team,
+      winner_civs = civ.teamCivNames(team),
+      victory = typeOf(g.GameInfo.Victories[g.Game.GetVictory()]),
+      winning_turn = g.Game.GetWinningTurn(),
+    }
+  end
+
+
+  -- Friendship is a player fact, the treaties and open borders are team
+  -- facts, so one pair entry is assembled from both. Read for every
+  -- ordered pair: open borders and embassies belong to the granting
+  -- side, and the poller decides which facts are mutual.
+  local function diplomacyPair(a, b)
+    local teamA, teamB = g.Teams[g.Players[a]:GetTeam()], g.Players[b]:GetTeam()
+    return {
+      dof = g.Players[a]:IsDoF(b),
+      open_borders = teamA:IsAllowsOpenBordersToTeam(teamB),
+      embassy = teamA:HasEmbassyAtTeam(teamB),
+      defensive_pact = teamA:IsDefensivePact(teamB),
+      trade_agreement = teamA:IsHasTradeAgreement(teamB),
+    }
+  end
+
+  function civ.diplomacySnapshot()
+    local snapshot = {}
+    for a = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[a]) then
+        snapshot[a] = {}
+        for b = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+          if a ~= b and isLivingMajor(g.Players[b]) then
+            snapshot[a][b] = diplomacyPair(a, b)
+          end
+        end
+      end
+    end
+    return snapshot
+  end
+
   local function resolutionType(id)
     return typeOf(g.GameInfo.Resolutions[id])
   end
@@ -488,6 +533,18 @@ function M.CityConstructed(civ, ownerId, cityId, buildingId, gold, faith)
     building = civ.buildingType(buildingId),
     wonder = civ.wonderClass(buildingId),
     bought_with = boughtWith(gold, faith),
+  }
+end
+
+-- The building type precedes the city id here, the reverse of
+-- CityConstructed (CvBuildingClasses.cpp:3244-3253).
+function M.BuildingSold(civ, ownerId, buildingId, cityId)
+  return {
+    event = "building_sold",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    city = civ.cityName(ownerId, cityId),
+    building = civ.buildingType(buildingId),
   }
 end
 
@@ -1164,6 +1221,160 @@ end
 return M
 end)
 
+register("src.victory", function()
+-- Announces the end of the game exactly once. A per-turn poll cannot:
+-- the game stops on the turn it is decided, so the last PlayerDoTurn
+-- never comes. GameCoreTestVictory does, because CvGame::testVictory
+-- fires it above its own "already decided" guard (CvGame.cpp:9943), and
+-- keeps firing on player death, team change and concluded Congress
+-- votes afterwards - hence the one-shot flag. The DLL calls this hook
+-- "to allow a Lua script to set the victory state", so the handler
+-- returns nothing: reading is safe, answering would not be.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "GameCoreTestVictory", error = tostring(err) }
+end
+
+function M.new(civ, sink)
+  local announced = false
+
+  local function watch()
+    if announced then return end
+    local result = civ.victory()
+    if not result then return end
+    announced = true
+    sink(json.encode({
+      event = "game_ended",
+      turn = civ.turn(),
+      winner_team = result.winner_team,
+      winner_civs = result.winner_civs,
+      victory = result.victory,
+      winning_turn = result.winning_turn,
+    }))
+  end
+
+  return function()
+    local ok, err = pcall(watch)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
+register("src.diplomacy", function()
+-- Polls the state between every pair of living majors once per turn and
+-- diffs it into events. Only war and peace have hooks (DeclareWar,
+-- MakePeace); friendships, pacts, open borders and embassies are state
+-- nobody announces, so they are read and compared turn to turn.
+-- Registered directly on PlayerDoTurn like the other stateful pollers,
+-- and gated on the turn because the pairwise state is game-global while
+-- PlayerDoTurn fires once per living player.
+--
+-- The first poll of a session only records a baseline: a reload must not
+-- re-announce friendships that have stood for fifty turns.
+local json = _require("src.json")
+
+local M = {}
+
+-- The DLL sets DoF, defensive pacts and trade agreements on both sides,
+-- so those are one fact about a pair and are read from the lower player
+-- id only. Open borders and embassies belong to the side that granted
+-- them and are reported per direction.
+local MUTUAL = {
+  { flag = "dof", up = "friendship_declared", down = "friendship_ended" },
+  { flag = "defensive_pact", up = "defensive_pact_signed", down = "defensive_pact_ended" },
+  { flag = "trade_agreement", up = "trade_agreement_signed", down = "trade_agreement_ended" },
+}
+
+local ONE_SIDED = {
+  { flag = "open_borders", up = "open_borders_granted", down = "open_borders_revoked" },
+  { flag = "embassy", up = "embassy_established", down = "embassy_ended" },
+}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (diplomacy)", error = tostring(err) }
+end
+
+-- pairs() order is undefined, and the log is compared line by line.
+local function sortedIds(snapshot)
+  local ids = {}
+  for id in pairs(snapshot) do table.insert(ids, id) end
+  table.sort(ids)
+  return ids
+end
+
+local function changed(known, current, flag)
+  if not known or not current then return nil end
+  if known[flag] == current[flag] then return nil end
+  return current[flag]
+end
+
+local function diffMutual(civ, sink, turn, known, current, a, b)
+  for _, fact in ipairs(MUTUAL) do
+    local now = changed(known, current, fact.flag)
+    if now ~= nil then
+      sink(json.encode({
+        event = now and fact.up or fact.down,
+        turn = turn,
+        civs = { civ.civName(a), civ.civName(b) },
+      }))
+    end
+  end
+end
+
+local function diffOneSided(civ, sink, turn, known, current, a, b)
+  for _, fact in ipairs(ONE_SIDED) do
+    local now = changed(known, current, fact.flag)
+    if now ~= nil then
+      sink(json.encode({
+        event = now and fact.up or fact.down,
+        turn = turn,
+        civ = civ.civName(a),
+        other_civ = civ.civName(b),
+      }))
+    end
+  end
+end
+
+local function diffPair(civ, sink, turn, known, current, a, b)
+  if a < b then diffMutual(civ, sink, turn, known, current, a, b) end
+  diffOneSided(civ, sink, turn, known, current, a, b)
+end
+
+local function diff(civ, sink, turn, known, snapshot)
+  for _, a in ipairs(sortedIds(snapshot)) do
+    for _, b in ipairs(sortedIds(snapshot[a])) do
+      diffPair(civ, sink, turn, (known[a] or {})[b], snapshot[a][b], a, b)
+    end
+  end
+end
+
+function M.new(civ, sink)
+  local state = { turn = nil, snapshot = nil }
+
+  local function poll()
+    local turn = civ.turn()
+    if turn == state.turn then return end
+    state.turn = turn
+
+    local snapshot = civ.diplomacySnapshot()
+    if state.snapshot then diff(civ, sink, turn, state.snapshot, snapshot) end
+    state.snapshot = snapshot
+  end
+
+  return function()
+    local ok, err = pcall(poll)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.main", function()
 -- Entry point: gate on the local opt-in flag, then wire the logger
 -- to the real game. Receives the game globals as a table so tests
@@ -1173,6 +1384,8 @@ local extractors = _require("src.extractors")
 local logger = _require("src.logger")
 local census = _require("src.census")
 local congress = _require("src.congress")
+local victory = _require("src.victory")
+local diplomacy = _require("src.diplomacy")
 
 local M = {}
 
@@ -1194,6 +1407,8 @@ function M.start(g)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
+  g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
 
 return M

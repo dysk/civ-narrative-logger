@@ -9,6 +9,7 @@ local FILES = {
   "src.census",
   "src.congress",
   "src.victory",
+  "src.diplomacy",
   "src.main",
 }
 
