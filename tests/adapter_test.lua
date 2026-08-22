@@ -564,3 +564,35 @@ t.test("congressSnapshot reports which league projects are running", function()
     LEAGUE_PROJECT_INTERNATIONAL_SPACE_STATION = { active = false, complete = false },
   }, congressCiv.congressSnapshot().projects)
 end)
+
+-- Game.GetWinner is a team, Game.GetVictory a victory type, both NO_*
+-- (-1) until the game is decided (CvLuaGame.cpp:201-202).
+local victoryGlobals
+victoryGlobals = {
+  Game = {
+    GetGameTurn = function() return 300 end,
+    GetWinner = function() return victoryGlobals._winner end,
+    GetVictory = function() return victoryGlobals._victory end,
+    GetWinningTurn = function() return victoryGlobals._winningTurn end,
+  },
+  GameDefines = { MAX_CIV_PLAYERS = 3 },
+  Players = globals.Players,
+  GameInfo = { Victories = { [3] = { Type = "VICTORY_SPACE_RACE" } } },
+}
+local victoryCiv = adapter.new(victoryGlobals)
+
+t.test("victory is nil while no team has won", function()
+  victoryGlobals._winner, victoryGlobals._victory = -1, -1
+  t.assert_nil(victoryCiv.victory())
+end)
+
+t.test("victory reports the winning team, its civs and the victory type", function()
+  victoryGlobals._winner, victoryGlobals._victory = 1, 3
+  victoryGlobals._winningTurn = 297
+  t.assert_deep_equal({
+    winner_team = 1,
+    winner_civs = { "Rome" },
+    victory = "VICTORY_SPACE_RACE",
+    winning_turn = 297,
+  }, victoryCiv.victory())
+end)

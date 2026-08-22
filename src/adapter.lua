@@ -244,6 +244,21 @@ function M.new(g)
     return roster
   end
 
+  -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
+  -- game sets them together (CvGame::setWinner), so the team alone
+  -- answers "is it over".
+  function civ.victory()
+    local team = g.Game.GetWinner()
+    if not team or team < 0 then return nil end
+    return {
+      winner_team = team,
+      winner_civs = civ.teamCivNames(team),
+      victory = typeOf(g.GameInfo.Victories[g.Game.GetVictory()]),
+      winning_turn = g.Game.GetWinningTurn(),
+    }
+  end
+
+
   local function resolutionType(id)
     return typeOf(g.GameInfo.Resolutions[id])
   end

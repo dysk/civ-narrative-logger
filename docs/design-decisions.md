@@ -121,14 +121,12 @@ file copy. Rebuild with `luajit tools/build.lua` after changing src/.
 
 ## Hooks we deliberately do not subscribe to
 
-Beyond the blanket rule against decision-query hooks, four eligible-
+Beyond the blanket rule against decision-query hooks, three eligible-
 looking hooks stay out, checked against the Lekmod DLL call sites:
 
 - `GetReligionToFound`, `GetReligionToSpread`,
   `GetFounderBenefitsReligion` - CallAccumulator queries; a
   handler's return value feeds the game's religion decisions.
-- `GameCoreTestVictory` - a plain hook, but it pushes no arguments
-  and fires every game-core update; there is nothing to record.
 - `UnitGetSpecialExploreTarget` - fires inside the AI explorer's
   move selection loop; pure volume with no narrative content.
 - `PlayerHappinessChanged` - safe but redundant: it pushes only the
@@ -153,3 +151,24 @@ overwritten slot.
 The congress poller additionally gates `congress_snapshot` to once per
 turn with a `civ.turn()` tracker, since `PlayerDoTurn` fires once per
 living player but the league is turn-global, not per-player.
+
+## GameCoreTestVictory is a trigger, not an argument list
+
+This hook was first dismissed for pushing no arguments, which reads the
+wrong half of it: what makes it worth subscribing to is *when* it fires,
+not what it carries. Nothing else can record the end of the game. The
+per-turn pollers cannot, because the game stops on the turn it is
+decided and the final `PlayerDoTurn` never arrives, so `Game.GetWinner`
+would have to be read on a turn that never gets polled.
+`CvGame::testVictory` fires this hook above its own
+`if(getVictory() != NO_VICTORY) return;` guard (`CvGame.cpp:9943-9949`),
+so it still fires once the game is over. It is called once per game turn
+plus on player death, team change and a concluded Congress vote - a
+handful of firings per turn for a handler that reads one integer, and
+`src/victory.lua` keeps a one-shot flag so only the first decided read
+is logged.
+
+The DLL's own comment at that call site says the hook exists "to allow a
+Lua script to set the victory state". Our handler therefore returns
+nothing, deliberately and under test: a return value here would not just
+pollute the log, it could decide the game.

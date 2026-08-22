@@ -39,3 +39,9 @@ t.test("start registers the snapshot extractor plus the census and congress poll
   main.start(g)
   t.assert_equal(3, #handlers.PlayerDoTurn)
 end)
+
+t.test("start registers the victory watcher", function()
+  local g, handlers = fakes.gameGlobals(1)
+  main.start(g)
+  t.assert_equal(1, #handlers.GameCoreTestVictory)
+end)
