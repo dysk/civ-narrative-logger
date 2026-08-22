@@ -29,8 +29,10 @@ so `print` output reaches `Logs/Lua.log`.
 # Extracting the events from Lua.log
 
 After a session, turn the game's `Logs/Lua.log` into one JSON record
-per line (only this logger's lines survive; timestamps, other mods'
-output and Windows line endings are stripped):
+per line (only this logger's lines survive; other mods' output and
+Windows line endings are stripped, and the engine's seconds clock from
+the line prefix is kept as `t_log` — the only real-time signal the game
+gives us):
 
 ```sh
 luajit tools/parser.lua path/to/Lua.log > events.jsonl

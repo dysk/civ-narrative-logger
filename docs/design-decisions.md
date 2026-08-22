@@ -232,3 +232,28 @@ their cities would multiply the count for a fraction of the value. And
 the analyst's import path needs work before it swallows a log this
 size; that is written up in its own repo as `docs/import-volume.md`
 rather than guessed at here.
+
+## Elimination is polled, and the parser keeps the log's own clock
+
+Two facts closed the first tier, and neither is pushed by the game.
+
+`CvPlayer::setAlive` calls no hook, and a dead player takes no turn, so
+an elimination has never appeared in the log at all: `civ.playerStats`
+simply starts returning nil and that civ's snapshots stop. `src/roster.lua`
+polls the living majors once per turn and reports whoever left the list,
+with `capital_held_by` - the original capital outlives its owner, so the
+question can still be asked after the fact, and the answer separates a
+conquest from a collapse. Like the diplomacy poller it takes the first
+poll of a session as a baseline, so a reload does not report everyone
+who fell before it.
+
+The parser used to throw the `[1350613.044]` prefix away. Nothing in
+the game exposes real time to Lua - `Player:GetTotalTimePlayed` reports
+seconds since the machine booted (`lekmod-lua-api.md`) - so that prefix
+is the only record of how long a turn took and when a session ran,
+which on a pitboss is the difference between "the game was slow" and
+"one player sat on their turn for two days". It is now kept as `t_log`,
+written in front of the payload's own keys: the parser has no JSON
+decoder, and the stamp is a fact about the log line rather than about
+the game. The raw text goes through unconverted, since a float
+round-trip only risks losing digits it cannot gain.

@@ -397,6 +397,20 @@ t.test("cityStats is empty for a city-state", function()
   t.assert_deep_equal({}, civ.cityStats(3))
 end)
 
+t.test("livingMajors maps the surviving major civs by player id", function()
+  t.assert_deep_equal({ [0] = "Poland", [1] = "Rome" }, civ.livingMajors())
+end)
+
+-- The city outlives the player, so the holder of a fallen capital is
+-- readable after the elimination, not only before it.
+t.test("capitalHolder names who holds a fallen civ's original capital", function()
+  t.assert_equal("Poland", civ.capitalHolder(1))
+end)
+
+t.test("capitalHolder is nil when nobody holds it", function()
+  t.assert_nil(civ.capitalHolder(2))
+end)
+
 t.test("techType resolves a tech id to its Type string", function()
   t.assert_equal("TECH_POTTERY", civ.techType(12))
 end)

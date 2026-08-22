@@ -437,6 +437,31 @@ function M.new(g)
     return stats
   end
 
+
+  function civ.livingMajors()
+    local majors = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[i]) then majors[i] = civ.civName(i) end
+    end
+    return majors
+  end
+
+  -- Who ended up with a fallen civ's original capital. The city outlives
+  -- the player, so this answers after the elimination as well as before,
+  -- which is the only moment the roster poll can ask.
+  function civ.capitalHolder(playerId)
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        for city in p:Cities() do
+          if city:IsOriginalMajorCapital() and city:GetOriginalOwner() == playerId then
+            return civ.civName(i)
+          end
+        end
+      end
+    end
+  end
+
   local function activatedMods()
     local mods = {}
     for _, mod in ipairs(g.Modding.GetActivatedMods()) do
@@ -1295,6 +1320,67 @@ end
 return M
 end)
 
+register("src.roster", function()
+-- Announces eliminations. Nothing pushes them: CvPlayer::setAlive calls
+-- no hook, and a dead player takes no turn, so the only trace in the log
+-- today is that civ.playerStats stops answering and the snapshot stream
+-- quietly ends. This polls the roster of living majors once per turn and
+-- reports whoever left it, together with who ended up holding their
+-- original capital - the difference between a conquest and a collapse.
+--
+-- The first poll of a session records a baseline: a reload must not
+-- report every civ that fell before it as newly eliminated.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (roster)", error = tostring(err) }
+end
+
+-- pairs() order is undefined, and the log is compared line by line.
+local function sortedIds(majors)
+  local ids = {}
+  for id in pairs(majors) do table.insert(ids, id) end
+  table.sort(ids)
+  return ids
+end
+
+local function reportFallen(civ, sink, turn, known, majors)
+  for _, id in ipairs(sortedIds(known)) do
+    if not majors[id] then
+      sink(json.encode({
+        event = "player_eliminated",
+        turn = turn,
+        civ = known[id],
+        capital_held_by = civ.capitalHolder(id),
+      }))
+    end
+  end
+end
+
+function M.new(civ, sink)
+  local state = { turn = nil, known = nil }
+
+  local function poll()
+    local turn = civ.turn()
+    if turn == state.turn then return end
+    state.turn = turn
+
+    local majors = civ.livingMajors()
+    if state.known then reportFallen(civ, sink, turn, state.known, majors) end
+    state.known = majors
+  end
+
+  return function()
+    local ok, err = pcall(poll)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.congress", function()
 -- Polls the World Congress once per turn and diffs it into events. No
 -- GameEvents hook covers the Congress (mp_vote/mp_proposal_result are
@@ -1600,6 +1686,7 @@ local extractors = _require("src.extractors")
 local logger = _require("src.logger")
 local census = _require("src.census")
 local cities = _require("src.cities")
+local roster = _require("src.roster")
 local congress = _require("src.congress")
 local victory = _require("src.victory")
 local diplomacy = _require("src.diplomacy")
@@ -1624,6 +1711,7 @@ function M.start(g)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(cities.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(roster.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))

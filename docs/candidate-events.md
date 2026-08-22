@@ -56,7 +56,10 @@ the hook exists "to allow a Lua script to set the victory state", and
 `logger.attach`'s handlers already return nothing — worth keeping true
 deliberately here rather than by accident.
 
-### Players dying
+### Players dying — implemented
+
+Landed as `src/roster.lua` plus `civ.livingMajors()` and
+`civ.capitalHolder()`.
 
 `civ.playerStats` returns `nil` for a dead player (`src/adapter.lua`),
 so a player's elimination shows up as the silent end of their snapshot
@@ -146,7 +149,10 @@ log timestamps below.
 These are all flat scalars on a record that already exists; the
 resource lists are the only ones that grow (keep to non-zero entries).
 
-### Wall-clock time, in the parser
+### Wall-clock time, in the parser — implemented
+
+Landed as `t_log` on every record; `tools/parser.lua` rewrites the
+prefix instead of stripping it.
 
 `tools/parser.lua` throws the `[1350613.044]` prefix away. It is the
 engine's seconds clock, and it is the only real-time signal we have:
@@ -242,9 +248,19 @@ without a single hook.
 
 ## Order of work
 
-Tier 1 is small, touches one hook, one poller and the parser, and each
-item is a fact that cannot be recovered from a finished game: the
-ending, the deaths, the treaties, what everyone was researching, and
-when each turn actually happened. It should land before the first human
-game. Tier 2 is the layer the strategy analysis will eventually stand
-on and can follow if there is time; none of it is harder, only bigger.
+Tier 1 is done. Every item in it was a fact that cannot be recovered
+from a finished game - the ending, the deaths, the treaties, what
+everyone was researching, and when each turn actually happened - and
+all of them now land in the log before the first human game.
+
+The city snapshot from Tier 2 landed with them, because production is
+the one thing that shows a wonder race and the turn somebody lost it.
+What remains in Tier 2 is trade routes, city-state relations with their
+quests, and espionage: none of it harder than what is already here,
+only bigger, and each of them leaves at least some indirect trace in a
+finished log, which is why they waited. Tier 3 stays as written - the
+reasons for leaving those out have not changed.
+
+Before adding more volume, note that the analyst's import path is the
+binding constraint now, not the logger: see `docs/import-volume.md` in
+that repo.

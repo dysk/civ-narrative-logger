@@ -381,6 +381,31 @@ function M.new(g)
     return stats
   end
 
+
+  function civ.livingMajors()
+    local majors = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[i]) then majors[i] = civ.civName(i) end
+    end
+    return majors
+  end
+
+  -- Who ended up with a fallen civ's original capital. The city outlives
+  -- the player, so this answers after the elimination as well as before,
+  -- which is the only moment the roster poll can ask.
+  function civ.capitalHolder(playerId)
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        for city in p:Cities() do
+          if city:IsOriginalMajorCapital() and city:GetOriginalOwner() == playerId then
+            return civ.civName(i)
+          end
+        end
+      end
+    end
+  end
+
   local function activatedMods()
     local mods = {}
     for _, mod in ipairs(g.Modding.GetActivatedMods()) do
