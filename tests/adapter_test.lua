@@ -49,6 +49,30 @@ local function fakePlayer(spec)
     end,
     CalculateGrossGold = function() return spec.grossGold end,
     GetNumPlots = function() return spec.plots end,
+    GetFaith = function() return spec.faithStored end,
+    GetJONSCulture = function() return spec.cultureStored end,
+    GetNextPolicyCost = function() return spec.nextPolicyCost end,
+    GetNumPolicies = function() return spec.policies end,
+    GetCurrentResearch = function() return spec.researching end,
+    GetResearchTurnsLeft = function(_, techId, overflow)
+      if techId == spec.researching and overflow == true then
+        return spec.researchTurnsLeft
+      end
+    end,
+    GetGoldenAgeTurns = function() return spec.goldenAgeTurns end,
+    GetGoldenAgeProgressMeter = function() return spec.goldenAgeProgress end,
+    GetGoldenAgeProgressThreshold = function() return spec.goldenAgeThreshold end,
+    GetAnarchyNumTurns = function() return spec.anarchyTurns end,
+    GetLateGamePolicyTree = function() return spec.ideology end,
+    GetPublicOpinionType = function() return spec.publicOpinion end,
+    GetPublicOpinionUnhappiness = function() return spec.publicOpinionUnhappiness end,
+    GetPublicOpinionPreferredIdeology = function() return spec.preferredIdeology end,
+    GetGreatPeopleCreated = function() return spec.greatPeople end,
+    GetGreatGeneralsCreated = function() return spec.greatGenerals end,
+    GetNumResourceTotal = function(_, id) return (spec.resourceTotal or {})[id] or 0 end,
+    GetNumResourceUsed = function(_, id) return (spec.resourceUsed or {})[id] or 0 end,
+    GetResourceImport = function(_, id) return (spec.resourceImport or {})[id] or 0 end,
+    GetResourceExport = function(_, id) return (spec.resourceExport or {})[id] or 0 end,
     Cities = function()
       local list = spec.citiesList or {}
       local i = 0
@@ -91,6 +115,13 @@ local globals = {
     end,
   },
   YieldTypes = { YIELD_FOOD = "YIELD_FOOD", YIELD_PRODUCTION = "YIELD_PRODUCTION" },
+  PublicOpinionTypes = {
+    NO_PUBLIC_OPINION = -1,
+    PUBLIC_OPINION_CONTENT = 0,
+    PUBLIC_OPINION_DISSIDENTS = 1,
+    PUBLIC_OPINION_CIVIL_RESISTANCE = 2,
+    PUBLIC_OPINION_REVOLUTIONARY_WAVE = 3,
+  },
   GameInfoTypes = {
     PROJECT_APOLLO_PROGRAM = "PROJECT_APOLLO_PROGRAM",
     PROJECT_SS_BOOSTER = "PROJECT_SS_BOOSTER",
@@ -103,6 +134,17 @@ local globals = {
     [0] = fakePlayer({
       civ = "Poland", team = 0,
       name = "dysk", human = true, handicap = 5,
+      faithStored = 480, cultureStored = 1250,
+      nextPolicyCost = 720, policies = 11,
+      researching = 12, researchTurnsLeft = 4,
+      goldenAgeTurns = 0, goldenAgeProgress = 310, goldenAgeThreshold = 500,
+      anarchyTurns = 0, ideology = 9, preferredIdeology = 10,
+      publicOpinion = 1, publicOpinionUnhappiness = 6,
+      greatPeople = 3, greatGenerals = 2,
+      resourceTotal = { [1] = 8, [2] = 6, [3] = 1 },
+      resourceUsed = { [1] = 5 },
+      resourceImport = { [3] = 1 },
+      resourceExport = { [1] = 2 },
       cityId = 3, cityName = "Warsaw",
       unitId = 9, unitTypeId = 5,
       score = 1200, gold = 340, goldRate100 = 1250, science100 = 4800,
@@ -119,7 +161,8 @@ local globals = {
         { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false },
       },
     }),
-    [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5 }),
+    [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5,
+                       goldRate100 = 0, science100 = 0, researching = -1 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
     [3] = fakePlayer({ civ = "Venice", minor = true }),
     [4] = fakePlayer({ civ = "Barbarians", barbarian = true }),
@@ -139,6 +182,12 @@ local globals = {
         }
         return counts[projectId] or 0
       end,
+    },
+    [1] = {
+      GetTeamTechs = function()
+        return { GetNumTechsKnown = function() return 19 end }
+      end,
+      GetProjectCount = function() return 0 end,
     },
   },
   Map = {
@@ -175,7 +224,24 @@ local globals = {
     Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
     Policies = { [6] = { Type = "POLICY_LIBERTY" } },
-    PolicyBranchTypes = { [2] = { Type = "POLICY_BRANCH_HONOR" } },
+    PolicyBranchTypes = {
+      [2] = { Type = "POLICY_BRANCH_HONOR" },
+      [9] = { Type = "POLICY_BRANCH_FREEDOM" },
+      [10] = { Type = "POLICY_BRANCH_ORDER" },
+    },
+    Resources = function()
+      local rows = {
+        { ID = 1, Type = "RESOURCE_IRON", ResourceUsage = 1 },
+        { ID = 2, Type = "RESOURCE_WHEAT", ResourceUsage = 0 },
+        { ID = 3, Type = "RESOURCE_SILK", ResourceUsage = 2 },
+        { ID = 4, Type = "RESOURCE_HORSE", ResourceUsage = 1 },
+      }
+      local i = 0
+      return function()
+        i = i + 1
+        return rows[i]
+      end
+    end,
     UnitPromotions = { [3] = { Type = "PROMOTION_MORALE" } },
     Improvements = { [17] = { Type = "IMPROVEMENT_FARM" } },
     Features = { [21] = { Type = "FEATURE_EL_DORADO" } },
@@ -319,6 +385,26 @@ t.test("playerStats reads the full stat line of a living major civ", function()
     food = 18,
     gross_gold = 45,
     plots = 87,
+    faith_stored = 480,
+    culture_stored = 1250,
+    next_policy_cost = 720,
+    policies = 11,
+    researching = "TECH_POTTERY",
+    research_turns_left = 4,
+    golden_age_turns = 0,
+    golden_age_progress = 310,
+    golden_age_threshold = 500,
+    anarchy_turns = 0,
+    ideology = "POLICY_BRANCH_FREEDOM",
+    public_opinion = "PUBLIC_OPINION_DISSIDENTS",
+    public_opinion_unhappiness = 6,
+    preferred_ideology = "POLICY_BRANCH_ORDER",
+    great_people = 3,
+    great_generals = 2,
+    resources = {
+      { resource = "RESOURCE_IRON", total = 8, used = 5, import = 0, export = 2 },
+      { resource = "RESOURCE_SILK", total = 1, used = 0, import = 1, export = 0 },
+    },
     capitals = { "Poland", "Rome" },
     spaceship = {
       apollo = 1,
@@ -328,6 +414,24 @@ t.test("playerStats reads the full stat line of a living major civ", function()
       engine = 1,
     },
   }, civ.playerStats(0))
+end)
+
+-- What a civ is aiming at is the one thing tech_researched never says,
+-- and between two techs there is nothing to aim at.
+t.test("playerStats leaves the research fields empty when nothing is queued", function()
+  local stats = civ.playerStats(1)
+  t.assert_deep_equal({ researching = nil, research_turns_left = nil },
+    { researching = stats.researching, research_turns_left = stats.research_turns_left })
+end)
+
+-- Bonus resources say nothing about deals, and a resource nobody has
+-- touched is a row of zeroes in every snapshot of the game.
+t.test("playerStats lists only strategic and luxury resources in play", function()
+  local names = {}
+  for _, entry in ipairs(civ.playerStats(0).resources) do
+    table.insert(names, entry.resource)
+  end
+  t.assert_deep_equal({ "RESOURCE_IRON", "RESOURCE_SILK" }, names)
 end)
 
 t.test("playerStats influence list excludes self, dead, minors and barbarians", function()

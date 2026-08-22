@@ -228,11 +228,88 @@ function M.new(g)
     }
   end
 
-  function civ.playerStats(playerId)
-    local p = g.Players[playerId]
-    if not isLivingMajor(p) then
-      return nil
+  -- The stocks behind the rates above: what a player has banked is a
+  -- different decision from what they earn per turn.
+  local function stocksOf(p)
+    return {
+      faith_stored = p:GetFaith(),
+      culture_stored = p:GetJONSCulture(),
+      next_policy_cost = p:GetNextPolicyCost(),
+      policies = p:GetNumPolicies(),
+      golden_age_turns = p:GetGoldenAgeTurns(),
+      golden_age_progress = p:GetGoldenAgeProgressMeter(),
+      golden_age_threshold = p:GetGoldenAgeProgressThreshold(),
+      anarchy_turns = p:GetAnarchyNumTurns(),
+      great_people = p:GetGreatPeopleCreated(),
+      great_generals = p:GetGreatGeneralsCreated(),
+    }
+  end
+
+  -- tech_researched says what landed, never what was aimed at. Between
+  -- two techs there is nothing aimed at, and GetCurrentResearch answers
+  -- NO_TECH (-1).
+  local function researchOf(p)
+    local techId = p:GetCurrentResearch()
+    if not techId or techId < 0 then return {} end
+    return {
+      researching = civ.techType(techId),
+      research_turns_left = p:GetResearchTurnsLeft(techId, true),
+    }
+  end
+
+  -- PublicOpinionTypes is a global enum table in the mod environment,
+  -- read here the way CultureOverview.lua reads it, so the log carries
+  -- the game's own name rather than an integer we would have to decode.
+  local function publicOpinionName(value)
+    for name, id in pairs(g.PublicOpinionTypes) do
+      if id == value then return name end
     end
+  end
+
+  local function ideologyOf(p)
+    return {
+      ideology = civ.policyBranchType(p:GetLateGamePolicyTree()),
+      public_opinion = publicOpinionName(p:GetPublicOpinionType()),
+      public_opinion_unhappiness = p:GetPublicOpinionUnhappiness(),
+      preferred_ideology = civ.policyBranchType(p:GetPublicOpinionPreferredIdeology()),
+    }
+  end
+
+  local function resourceEntry(p, row)
+    local entry = {
+      resource = row.Type,
+      total = p:GetNumResourceTotal(row.ID, true),
+      used = p:GetNumResourceUsed(row.ID),
+      import = p:GetResourceImport(row.ID),
+      export = p:GetResourceExport(row.ID),
+    }
+    local touched = entry.total ~= 0 or entry.used ~= 0
+      or entry.import ~= 0 or entry.export ~= 0
+    return touched and entry or nil
+  end
+
+  -- Imports and exports are the closest thing to a record of a trade
+  -- deal, whose contents Lua cannot read: a luxury appearing in one
+  -- player's imports and another's exports on the same turn is a deal.
+  -- Bonus resources (usage 0) carry none of that, and an untouched
+  -- resource would be a row of zeroes in every snapshot of the game.
+  local function resourcesOf(p)
+    local resources = {}
+    for row in g.GameInfo.Resources() do
+      if row.ResourceUsage > 0 then
+        local entry = resourceEntry(p, row)
+        if entry then table.insert(resources, entry) end
+      end
+    end
+    return resources
+  end
+
+  local function addAll(target, extra)
+    for key, value in pairs(extra) do target[key] = value end
+    return target
+  end
+
+  local function baseStats(p, playerId)
     return {
       score = p:GetScore(),
       gold = p:GetGold(),
@@ -256,6 +333,19 @@ function M.new(g)
       capitals = capitalsOf(p),
       spaceship = spaceshipOf(g.Teams[p:GetTeam()]),
     }
+  end
+
+  function civ.playerStats(playerId)
+    local p = g.Players[playerId]
+    if not isLivingMajor(p) then
+      return nil
+    end
+    local stats = baseStats(p, playerId)
+    addAll(stats, stocksOf(p))
+    addAll(stats, researchOf(p))
+    addAll(stats, ideologyOf(p))
+    stats.resources = resourcesOf(p)
+    return stats
   end
 
   local function activatedMods()
@@ -1425,6 +1515,7 @@ _require("src.main").start({
   GameEvents = GameEvents,
   Modding = Modding,
   YieldTypes = YieldTypes,
+  PublicOpinionTypes = PublicOpinionTypes,
   GameInfoTypes = GameInfoTypes,
   print = print,
 })
