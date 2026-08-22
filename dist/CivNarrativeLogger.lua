@@ -348,6 +348,95 @@ function M.new(g)
     return stats
   end
 
+
+  local CITY_YIELDS = {
+    yield_food = "YIELD_FOOD",
+    yield_production = "YIELD_PRODUCTION",
+    yield_gold = "YIELD_GOLD",
+    yield_science = "YIELD_SCIENCE",
+    yield_culture = "YIELD_CULTURE",
+    yield_faith = "YIELD_FAITH",
+  }
+
+  local function cityYields(city)
+    local yields = {}
+    for field, yieldType in pairs(CITY_YIELDS) do
+      yields[field] = city:GetYieldRateTimes100(g.YieldTypes[yieldType]) / 100
+    end
+    return yields
+  end
+
+  -- A city answers -1 from the getters for the kinds it is not building,
+  -- so the queue takes naming both what is on it and which kind it is.
+  local function cityProduction(city)
+    local unitId = city:GetProductionUnit()
+    if unitId >= 0 then return civ.unitTypeName(unitId), "unit" end
+    local buildingId = city:GetProductionBuilding()
+    if buildingId >= 0 then return civ.buildingType(buildingId), "building" end
+    local projectId = city:GetProductionProject()
+    if projectId >= 0 then return civ.projectType(projectId), "project" end
+  end
+
+  local function cityReligion(city)
+    local religionId = city:GetReligiousMajority()
+    if not religionId or religionId < 0 then return {} end
+    return {
+      religion = civ.religionName(religionId),
+      religion_followers = city:GetNumFollowers(religionId),
+    }
+  end
+
+  local function cityCore(city)
+    local producing, kind = cityProduction(city)
+    return {
+      city = city:GetName(),
+      x = city:GetX(),
+      y = city:GetY(),
+      population = city:GetPopulation(),
+      food_stored = city:GetFood(),
+      food_turns_left = city:GetFoodTurnsLeft(),
+      producing = producing,
+      producing_kind = kind,
+      production_turns_left = city:GetProductionTurnsLeft(),
+      production_stored = city:GetProduction(),
+    }
+  end
+
+  local function cityCondition(city)
+    return {
+      buildings = city:GetNumBuildings(),
+      damage = city:GetDamage(),
+      defense = city:GetStrengthValue(),
+      puppet = city:IsPuppet(),
+      occupied = city:IsOccupied(),
+      razing = city:IsRazing(),
+      resistance_turns = city:GetResistanceTurns(),
+      blockaded = city:IsBlockaded(),
+      capital = city:IsCapital(),
+      original_owner = civ.civName(city:GetOriginalOwner()),
+    }
+  end
+
+  local function cityRecord(city)
+    local record = cityCore(city)
+    addAll(record, cityCondition(city))
+    addAll(record, cityYields(city))
+    addAll(record, cityReligion(city))
+    return record
+  end
+
+  -- PlayerDoTurn fires for city-states and barbarians as well, and their
+  -- cities would multiply the record count for a fraction of the value.
+  function civ.cityStats(playerId)
+    local p = g.Players[playerId]
+    if not isLivingMajor(p) then return {} end
+    local stats = {}
+    for city in p:Cities() do
+      table.insert(stats, cityRecord(city))
+    end
+    return stats
+  end
+
   local function activatedMods()
     local mods = {}
     for _, mod in ipairs(g.Modding.GetActivatedMods()) do
@@ -1169,6 +1258,43 @@ end
 return M
 end)
 
+register("src.cities", function()
+-- Writes one city_snapshot per city per turn. Cities are where the
+-- decisions happen and the log has only ever described them through the
+-- events that befall them: nothing has ever carried what a city is
+-- building, how much damage it is taking, or whether it can be governed
+-- at all. Registered directly on PlayerDoTurn like the other pollers,
+-- since it emits many records per firing; unlike them it keeps no state
+-- and diffs nothing - every city is written every turn, and the
+-- filtering belongs downstream.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (cities)", error = tostring(err) }
+end
+
+function M.new(civ, sink)
+  local function poll(playerId)
+    local turn, name = civ.turn(), civ.civName(playerId)
+    for _, record in ipairs(civ.cityStats(playerId)) do
+      record.event = "city_snapshot"
+      record.turn = turn
+      record.civ = name
+      sink(json.encode(record))
+    end
+  end
+
+  return function(playerId)
+    local ok, err = pcall(poll, playerId)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.congress", function()
 -- Polls the World Congress once per turn and diffs it into events. No
 -- GameEvents hook covers the Congress (mp_vote/mp_proposal_result are
@@ -1473,6 +1599,7 @@ local adapter = _require("src.adapter")
 local extractors = _require("src.extractors")
 local logger = _require("src.logger")
 local census = _require("src.census")
+local cities = _require("src.cities")
 local congress = _require("src.congress")
 local victory = _require("src.victory")
 local diplomacy = _require("src.diplomacy")
@@ -1496,6 +1623,7 @@ function M.start(g)
   logger.attach(deps)
   logger.emit(deps, "sessionStarted", extractors.sessionStarted)
   g.GameEvents.PlayerDoTurn.Add(census.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(cities.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))

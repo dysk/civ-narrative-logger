@@ -87,6 +87,28 @@ local function fakePlayer(spec)
           GetName = function() return c.name end,
           GetX = function() return c.x end,
           GetY = function() return c.y end,
+          GetPopulation = function() return c.population end,
+          GetFood = function() return c.foodStored end,
+          GetFoodTurnsLeft = function() return c.foodTurnsLeft end,
+          GetYieldRateTimes100 = function(_, yield) return (c.yields or {})[yield] or 0 end,
+          GetProductionUnit = function() return c.productionUnit or -1 end,
+          GetProductionBuilding = function() return c.productionBuilding or -1 end,
+          GetProductionProject = function() return c.productionProject or -1 end,
+          GetProductionTurnsLeft = function() return c.productionTurnsLeft end,
+          GetProduction = function() return c.productionStored end,
+          GetNumBuildings = function() return c.buildings end,
+          GetDamage = function() return c.damage or 0 end,
+          GetStrengthValue = function() return c.defense end,
+          IsPuppet = function() return c.puppet == true end,
+          IsOccupied = function() return c.occupied == true end,
+          IsRazing = function() return c.razing == true end,
+          GetResistanceTurns = function() return c.resistanceTurns or 0 end,
+          IsBlockaded = function() return c.blockaded == true end,
+          GetReligiousMajority = function() return c.religion or -1 end,
+          GetNumFollowers = function(_, religion)
+            return religion == c.religion and c.followers or 0
+          end,
+          IsCapital = function() return c.isCapital == true end,
         }
       end
     end,
@@ -114,7 +136,14 @@ local globals = {
       }
     end,
   },
-  YieldTypes = { YIELD_FOOD = "YIELD_FOOD", YIELD_PRODUCTION = "YIELD_PRODUCTION" },
+  YieldTypes = {
+    YIELD_FOOD = "YIELD_FOOD",
+    YIELD_PRODUCTION = "YIELD_PRODUCTION",
+    YIELD_GOLD = "YIELD_GOLD",
+    YIELD_SCIENCE = "YIELD_SCIENCE",
+    YIELD_CULTURE = "YIELD_CULTURE",
+    YIELD_FAITH = "YIELD_FAITH",
+  },
   PublicOpinionTypes = {
     NO_PUBLIC_OPINION = -1,
     PUBLIC_OPINION_CONTENT = 0,
@@ -156,15 +185,27 @@ local globals = {
       influenceTrend = { [1] = 1 },
       production = 62, food = 18, grossGold = 45, plots = 87,
       citiesList = {
-        { id = 3, name = "Warsaw", x = 10, y = 20, originalOwner = 0, capital = true },
-        { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true },
-        { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false },
+        { id = 3, name = "Warsaw", x = 10, y = 20, originalOwner = 0, capital = true,
+          isCapital = true, population = 12, foodStored = 34, foodTurnsLeft = 6,
+          productionBuilding = 7, productionTurnsLeft = 9, productionStored = 140,
+          yields = { YIELD_FOOD = 1450, YIELD_PRODUCTION = 980, YIELD_GOLD = 620,
+                     YIELD_SCIENCE = 1130, YIELD_CULTURE = 400, YIELD_FAITH = 210 },
+          buildings = 14, defense = 3200, religion = 4, followers = 9 },
+        { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true,
+          population = 8, foodStored = 12, foodTurnsLeft = 11,
+          productionUnit = 5, productionTurnsLeft = 3, productionStored = 20,
+          buildings = 9, defense = 1800, damage = 45,
+          puppet = true, occupied = true, resistanceTurns = 3, blockaded = true },
+        { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false,
+          population = 5, foodStored = 8, foodTurnsLeft = 14,
+          productionTurnsLeft = 0, productionStored = 0, buildings = 4, defense = 900 },
       },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5,
                        goldRate100 = 0, science100 = 0, researching = -1 }),
     [2] = fakePlayer({ civ = "Carthage", team = 1, alive = false }),
-    [3] = fakePlayer({ civ = "Venice", minor = true }),
+    [3] = fakePlayer({ civ = "Venice", minor = true,
+                       citiesList = { { id = 21, name = "Venice", x = 30, y = 8 } } }),
     [4] = fakePlayer({ civ = "Barbarians", barbarian = true }),
   },
   Teams = {
@@ -283,6 +324,77 @@ t.test("citySet maps a player's current cities by id", function()
     [7] = { name = "Rome (captured)", x = 15, y = 22 },
     [9] = { name = "Krakow", x = 11, y = 21 },
   }, civ.citySet(0))
+end)
+
+t.test("cityStats reads the full record for a city", function()
+  t.assert_deep_equal({
+    city = "Warsaw",
+    x = 10,
+    y = 20,
+    population = 12,
+    food_stored = 34,
+    food_turns_left = 6,
+    producing = "BUILDING_PYRAMIDS",
+    producing_kind = "building",
+    production_turns_left = 9,
+    production_stored = 140,
+    yield_food = 14.5,
+    yield_production = 9.8,
+    yield_gold = 6.2,
+    yield_science = 11.3,
+    yield_culture = 4,
+    yield_faith = 2.1,
+    buildings = 14,
+    damage = 0,
+    defense = 3200,
+    puppet = false,
+    occupied = false,
+    razing = false,
+    resistance_turns = 0,
+    blockaded = false,
+    religion = "Buddhism",
+    religion_followers = 9,
+    capital = true,
+    original_owner = "Poland",
+  }, civ.cityStats(0)[1])
+end)
+
+-- The three production getters answer -1 for the two kinds the city is
+-- not building, so what is on the queue takes naming both halves.
+t.test("cityStats names a unit under construction", function()
+  local city = civ.cityStats(0)[2]
+  t.assert_deep_equal({ producing = "UNIT_SETTLER", producing_kind = "unit" },
+    { producing = city.producing, producing_kind = city.producing_kind })
+end)
+
+t.test("cityStats leaves production empty when the city builds nothing", function()
+  local city = civ.cityStats(0)[3]
+  t.assert_deep_equal({ producing = nil, producing_kind = nil },
+    { producing = city.producing, producing_kind = city.producing_kind })
+end)
+
+t.test("cityStats omits the religion when no faith holds a majority", function()
+  t.assert_nil(civ.cityStats(0)[3].religion)
+end)
+
+-- A captured city is the one place the log can show a siege in progress
+-- and an empire it cannot govern.
+t.test("cityStats records occupation, resistance and damage", function()
+  local city = civ.cityStats(0)[2]
+  t.assert_deep_equal({
+    puppet = true, occupied = true, resistance_turns = 3,
+    blockaded = true, damage = 45, original_owner = "Rome",
+  }, {
+    puppet = city.puppet, occupied = city.occupied,
+    resistance_turns = city.resistance_turns, blockaded = city.blockaded,
+    damage = city.damage, original_owner = city.original_owner,
+  })
+end)
+
+-- PlayerDoTurn fires for city-states too, and their cities would double
+-- the record count for a fraction of the value.
+t.test("cityStats is empty for a city-state", function()
+  t.assert_deep_equal({}, civ.cityStats(3))
 end)
 
 t.test("techType resolves a tech id to its Type string", function()

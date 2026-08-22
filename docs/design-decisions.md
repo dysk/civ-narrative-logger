@@ -207,3 +207,28 @@ The first poll of a session records a baseline and emits nothing, the
 way the city census does. Re-announcing every standing friendship on
 each reload is exactly the defect `congress_founded` has, and this
 poller would multiply it by every pair.
+
+## The city snapshot keeps no state and diffs nothing
+
+Cities are where the decisions happen, and until now the log described
+them only through the events that befell them. Nothing carried what a
+city was building - so a wonder race, and the turn somebody lost it and
+switched production, was unreadable - nor how much damage it was taking
+under siege, nor whether it could be governed at all.
+
+`src/cities.lua` writes one `city_snapshot` per city per turn. Unlike
+the other pollers it holds no state: there is no diff, no baseline and
+no reload seam, because every city is written every turn. That follows
+the repo's standing decision to capture everything and filter
+downstream, and it is also the honest shape for the data - a city's
+yields and production change continuously, so "emit on change" would
+emit almost every turn anyway while costing a comparison per field.
+
+It is the largest thing in the log by an order of magnitude: 8 players
+× ~12 cities × 300 turns is around 29k records, against ~6k for a whole
+game today. Two consequences are deliberate. City-states and barbarians
+are skipped in `civ.cityStats` - `PlayerDoTurn` fires for them too, and
+their cities would multiply the count for a fraction of the value. And
+the analyst's import path needs work before it swallows a log this
+size; that is written up in its own repo as `docs/import-volume.md`
+rather than guessed at here.

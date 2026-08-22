@@ -292,6 +292,95 @@ function M.new(g)
     return stats
   end
 
+
+  local CITY_YIELDS = {
+    yield_food = "YIELD_FOOD",
+    yield_production = "YIELD_PRODUCTION",
+    yield_gold = "YIELD_GOLD",
+    yield_science = "YIELD_SCIENCE",
+    yield_culture = "YIELD_CULTURE",
+    yield_faith = "YIELD_FAITH",
+  }
+
+  local function cityYields(city)
+    local yields = {}
+    for field, yieldType in pairs(CITY_YIELDS) do
+      yields[field] = city:GetYieldRateTimes100(g.YieldTypes[yieldType]) / 100
+    end
+    return yields
+  end
+
+  -- A city answers -1 from the getters for the kinds it is not building,
+  -- so the queue takes naming both what is on it and which kind it is.
+  local function cityProduction(city)
+    local unitId = city:GetProductionUnit()
+    if unitId >= 0 then return civ.unitTypeName(unitId), "unit" end
+    local buildingId = city:GetProductionBuilding()
+    if buildingId >= 0 then return civ.buildingType(buildingId), "building" end
+    local projectId = city:GetProductionProject()
+    if projectId >= 0 then return civ.projectType(projectId), "project" end
+  end
+
+  local function cityReligion(city)
+    local religionId = city:GetReligiousMajority()
+    if not religionId or religionId < 0 then return {} end
+    return {
+      religion = civ.religionName(religionId),
+      religion_followers = city:GetNumFollowers(religionId),
+    }
+  end
+
+  local function cityCore(city)
+    local producing, kind = cityProduction(city)
+    return {
+      city = city:GetName(),
+      x = city:GetX(),
+      y = city:GetY(),
+      population = city:GetPopulation(),
+      food_stored = city:GetFood(),
+      food_turns_left = city:GetFoodTurnsLeft(),
+      producing = producing,
+      producing_kind = kind,
+      production_turns_left = city:GetProductionTurnsLeft(),
+      production_stored = city:GetProduction(),
+    }
+  end
+
+  local function cityCondition(city)
+    return {
+      buildings = city:GetNumBuildings(),
+      damage = city:GetDamage(),
+      defense = city:GetStrengthValue(),
+      puppet = city:IsPuppet(),
+      occupied = city:IsOccupied(),
+      razing = city:IsRazing(),
+      resistance_turns = city:GetResistanceTurns(),
+      blockaded = city:IsBlockaded(),
+      capital = city:IsCapital(),
+      original_owner = civ.civName(city:GetOriginalOwner()),
+    }
+  end
+
+  local function cityRecord(city)
+    local record = cityCore(city)
+    addAll(record, cityCondition(city))
+    addAll(record, cityYields(city))
+    addAll(record, cityReligion(city))
+    return record
+  end
+
+  -- PlayerDoTurn fires for city-states and barbarians as well, and their
+  -- cities would multiply the record count for a fraction of the value.
+  function civ.cityStats(playerId)
+    local p = g.Players[playerId]
+    if not isLivingMajor(p) then return {} end
+    local stats = {}
+    for city in p:Cities() do
+      table.insert(stats, cityRecord(city))
+    end
+    return stats
+  end
+
   local function activatedMods()
     local mods = {}
     for _, mod in ipairs(g.Modding.GetActivatedMods()) do

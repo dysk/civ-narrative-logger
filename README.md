@@ -18,14 +18,14 @@ install and enablement steps.
 
 Complete and tested: event extractors (45 hooks, 46 record types), JSON
 encoder, error-safe logger wiring, the Civ 5 API adapter, the gated
-entry point, three stateful per-turn pollers (city census, World
-Congress, pairwise diplomacy) that register directly on `PlayerDoTurn`
-instead of going through the hook-extractor path,
+entry point, four per-turn pollers (city census, World Congress,
+pairwise diplomacy, per-city snapshot) that register directly on
+`PlayerDoTurn` instead of going through the hook-extractor path,
 the one-shot victory watcher on `GameCoreTestVictory`, the single-file
 build (`luajit tools/build.lua`, output committed in `dist/`),
 the LEKMOD install path and the Lua.log → events.jsonl
 parser (`luajit tools/parser.lua`). Smoke-tested in single player on
-Windows and in multiplayer on a linux-wine pitboss server; the three
+Windows and in multiplayer on a linux-wine pitboss server; the four
 pollers and the victory watcher are unit-tested but not yet
 smoke-tested in a live game.
 
@@ -51,6 +51,7 @@ the game globals as a parameter and is tested against fakes.
 | `src/adapter.lua` | the only seam to the Civ 5 Lua API |
 | `src/logger.lua` | subscribes extractors to hooks, streams JSON to a sink |
 | `src/census.lua` | per-player city census, emits `city_destroyed` |
+| `src/cities.lua` | per-city, per-turn `city_snapshot` records |
 | `src/congress.lua` | per-turn World Congress poll, diffs it into events |
 | `src/victory.lua` | one-shot `game_ended` watcher on `GameCoreTestVictory` |
 | `src/diplomacy.lua` | per-turn poll of the state between every pair of majors |

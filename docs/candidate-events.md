@@ -110,7 +110,10 @@ under `LEKMOD_NEW_LUA_EVENTS`). One extractor, `building_sold`. Selling
 a building is a cash-crisis tell and currently the log shows the
 building still standing forever.
 
-### Snapshot: the stocks behind the flows
+### Snapshot: the stocks behind the flows — implemented
+
+Landed in `civ.playerStats`, resources filtered to strategic and
+luxury entries the player has actually touched.
 
 `civ.playerStats` records rates but not the balances the player is
 actually deciding with — the delta between "10 faith per turn" and "480
@@ -154,7 +157,11 @@ turn pacing in a pitboss game is a fact nobody can reconstruct later.
 
 ## Tier 2 — real volume, but the layer the analysis actually wants
 
-### A city snapshot
+### A city snapshot — implemented
+
+Landed as `src/cities.lua` plus `civ.cityStats()`, per turn and
+without a diff; see `design-decisions.md`, "The city snapshot keeps
+no state and diffs nothing".
 
 Cities are the unit of decision-making in Civ and the log describes
 them only through the events that happen to them. `CvLuaCity.cpp`

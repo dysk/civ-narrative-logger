@@ -7,6 +7,7 @@ local FILES = {
   "src.extractors",
   "src.logger",
   "src.census",
+  "src.cities",
   "src.congress",
   "src.victory",
   "src.diplomacy",
