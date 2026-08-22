@@ -159,6 +159,19 @@ t.test("CityConstructed records purchases with the currency used", function()
   }, extractors.CityConstructed(civ, 0, 3, 5, true, false))
 end)
 
+-- DLL: BuildingSold(ownerId, buildingType, cityId) -- the building type
+--   comes before the city id here, the reverse of CityConstructed
+--   (CvBuildingClasses.cpp:3244-3253)
+t.test("BuildingSold becomes a building_sold record", function()
+  t.assert_deep_equal({
+    event = "building_sold",
+    turn = 142,
+    civ = "Poland",
+    city = "Warsaw",
+    building = "BUILDING_GRANARY",
+  }, extractors.BuildingSold(civ, 0, 5, 3))
+end)
+
 -- DLL: CityTrained(ownerId, cityId, unitInstanceId, boughtWithGold,
 --   boughtWithFaithOrCulture) -- note: unit instance, not unit type
 t.test("CityTrained becomes a unit_trained record", function()

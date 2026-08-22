@@ -71,6 +71,18 @@ function M.CityConstructed(civ, ownerId, cityId, buildingId, gold, faith)
   }
 end
 
+-- The building type precedes the city id here, the reverse of
+-- CityConstructed (CvBuildingClasses.cpp:3244-3253).
+function M.BuildingSold(civ, ownerId, buildingId, cityId)
+  return {
+    event = "building_sold",
+    turn = civ.turn(),
+    civ = civ.civName(ownerId),
+    city = civ.cityName(ownerId, cityId),
+    building = civ.buildingType(buildingId),
+  }
+end
+
 function M.CityTrained(civ, ownerId, cityId, unitId, gold, faith)
   return {
     event = "unit_trained",
