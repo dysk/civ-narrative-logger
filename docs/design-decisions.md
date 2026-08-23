@@ -233,6 +233,65 @@ the analyst's import path needs work before it swallows a log this
 size; that is written up in its own repo as `docs/import-volume.md`
 rather than guessed at here.
 
+## Free buildings are polled, because the DLL never announces them
+
+A city can hold a building nobody built. Angkor Wat hands its city a
+University, Hagia Sophia a Temple, Carthage's trait a Harbor in every
+coastal city the moment it is founded, and a policy can do the same
+across an empire. None of it reaches `CityConstructed`: the grant paths
+end in `SetNumFreeBuilding` (`CvCity.cpp:486` for the trait loop, `525`
+for the policy loop, `7391` for a wonder's `FreeBuildingThisCity`), and
+the hook has three call sites, none of them on that road.
+
+The cost was not theoretical. The analyst read Babylon's development
+phase as closing on turn 77, on a University built in Akkad, three turns
+after Angkor Wat had already put one in the capital.
+
+`city:GetNumBuildings()` cannot gate the scan: `ChangeNumBuildings` is
+reached from `SetNumRealBuilding` alone (`CvBuildingClasses.cpp:3542`),
+so a free building never moves it. There is no cheap change signal, only
+the per-building question.
+
+Asking it of every building type would be ~500 questions per city per
+turn. Instead `civ.grantableBuildings` derives, once, the buildings any
+rule can grant, by reading the columns that grant them - `Buildings`
+(`FreeBuildingThisCity`, `FreeBuilding`), `Traits` (`FreeBuilding`,
+`FreeCapitalBuilding`, `FreeBuildingOnConquest`) and `Policies`
+(`FreeBuildingOnConquest`). In Lekmod that is 17 classes, about 45
+concrete buildings, the same order of magnitude as the field count
+`cities.lua` already reads per city.
+
+The set is expanded by class rather than resolved per player. A column
+may name a class or one civ's version of it, and the grant resolves to
+the owner's version (`CvCity.cpp:7391`), so every version of a grantable
+class is a candidate and no per-player resolution is needed. Resolving
+per player would also be wrong the other way round for anyone reading
+this later expecting captured cities to keep foreign uniques - they do
+not: `CvPlayer::acquireCity` rebuilds surviving buildings as the new
+owner's version of their class (`CvPlayer.cpp:3103`), world wonders
+excepted.
+
+The derivation is the one place this couples to the schema, so the
+poller announces it: one `free_buildings_ready` per session carrying the
+candidate count and the classes covered. A grant path we failed to
+enumerate shows up as a short list in the log rather than as a wrong
+conclusion months later.
+
+Seeding follows the census, with one exception. The first poll of a
+player records a baseline silently, or a reload would date every free
+building in the empire to the turn of the reload - the same defect that
+made this poller necessary. But that is only right past turn 1: at the
+start of a game nothing has been granted yet, so there is nothing to
+seed and everything to report, and a capital founded before the first
+`PlayerDoTurn` would otherwise be swallowed.
+
+Two consequences to know downstream. A grant made while a player acts
+lands in the log on the following turn, because `PlayerDoTurn` for that
+turn has already fired - a city founded on turn 40 reports its free
+Harbor on turn 41. And city ids come from a free list, so an entry is
+matched on id *and* name; a recycled id otherwise hides the new city's
+grants behind the old city's state.
+
 ## Elimination is polled, and the parser keeps the log's own clock
 
 Two facts closed the first tier, and neither is pushed by the game.

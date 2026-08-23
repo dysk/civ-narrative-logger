@@ -382,6 +382,94 @@ function M.new(g)
   end
 
 
+  -- Every column through which a rule can hand a city a building, read
+  -- from the schema rather than listed by hand, so a mod that adds a
+  -- wonder granting something new is covered without a code change.
+  local FREE_BUILDING_COLUMNS = {
+    Buildings = { "FreeBuildingThisCity", "FreeBuilding" },
+    Traits    = { "FreeBuilding", "FreeCapitalBuilding", "FreeBuildingOnConquest" },
+    Policies  = { "FreeBuildingOnConquest" },
+  }
+
+  local function buildingIndex()
+    local byClass, classOf = {}, {}
+    for row in g.GameInfo.Buildings() do
+      byClass[row.BuildingClass] = byClass[row.BuildingClass] or {}
+      table.insert(byClass[row.BuildingClass], row.Type)
+      classOf[row.Type] = row.BuildingClass
+    end
+    return byClass, classOf
+  end
+
+  -- A column names either a class or one civ's version of it. The grant
+  -- always resolves to the owner's version (CvCity.cpp:7391), so the class
+  -- is what a rule really points at.
+  local function collectClasses(classes, rows, columns, classOf)
+    for row in rows() do
+      for _, column in ipairs(columns) do
+        local value = row[column]
+        if value then classes[classOf[value] or value] = true end
+      end
+    end
+  end
+
+  local function grantableClasses(classOf)
+    local classes = {}
+    for tableName, columns in pairs(FREE_BUILDING_COLUMNS) do
+      local rows = g.GameInfo[tableName]
+      if rows then collectClasses(classes, rows, columns, classOf) end
+    end
+    return classes
+  end
+
+  local function sortedKeys(t)
+    local keys = {}
+    for key in pairs(t) do table.insert(keys, key) end
+    table.sort(keys)
+    return keys
+  end
+
+  -- The buildings worth asking a city about, with the classes they came
+  -- from for the poller to announce. Every version of a grantable class is
+  -- a candidate, which is what saves us from resolving class to building
+  -- per player.
+  function civ.grantableBuildings()
+    local byClass, classOf = buildingIndex()
+    local classes = sortedKeys(grantableClasses(classOf))
+    local types = {}
+    for _, class in ipairs(classes) do
+      for _, buildingType in ipairs(byClass[class] or {}) do
+        table.insert(types, buildingType)
+      end
+    end
+    table.sort(types)
+
+    local candidates = {}
+    for _, buildingType in ipairs(types) do
+      table.insert(candidates, { id = g.GameInfoTypes[buildingType], type = buildingType })
+    end
+    return candidates, classes
+  end
+
+  -- What each city was given rather than built. GetNumBuildings() counts
+  -- only real buildings (ChangeNumBuildings is reached from
+  -- SetNumRealBuilding alone), so there is no cheaper gate than asking.
+  function civ.freeBuildings(playerId, candidates)
+    local p = g.Players[playerId]
+    if not isLivingMajor(p) then return {} end
+    local cities = {}
+    for city in p:Cities() do
+      local buildings = {}
+      for _, candidate in ipairs(candidates) do
+        if city:GetNumFreeBuilding(candidate.id) > 0 then
+          table.insert(buildings, candidate.type)
+        end
+      end
+      table.insert(cities, { id = city:GetID(), name = city:GetName(), buildings = buildings })
+    end
+    return cities
+  end
+
   function civ.livingMajors()
     local majors = {}
     for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do

@@ -1,6 +1,23 @@
 local t = require("tests.test_helper")
 local adapter = require("src.adapter")
 
+-- GameInfo tables answer both to an id and to a call that walks every
+-- row; the fakes were only ever indexed, so the walk is added here.
+local function queryable(rows)
+  return setmetatable(rows, {
+    __call = function(self)
+      local keys = {}
+      for key in pairs(self) do table.insert(keys, key) end
+      table.sort(keys)
+      local i = 0
+      return function()
+        i = i + 1
+        return keys[i] and self[keys[i]] or nil
+      end
+    end,
+  })
+end
+
 local function fakePlayer(spec)
   return {
     IsAlive = function() return spec.alive ~= false end,
@@ -97,6 +114,7 @@ local function fakePlayer(spec)
           GetProductionTurnsLeft = function() return c.productionTurnsLeft end,
           GetProduction = function() return c.productionStored end,
           GetNumBuildings = function() return c.buildings end,
+          GetNumFreeBuilding = function(_, id) return (c.freeBuildings or {})[id] or 0 end,
           GetDamage = function() return c.damage or 0 end,
           GetStrengthValue = function() return c.defense end,
           IsPuppet = function() return c.puppet == true end,
@@ -157,6 +175,10 @@ local globals = {
     PROJECT_SS_COCKPIT = "PROJECT_SS_COCKPIT",
     PROJECT_SS_STASIS_CHAMBER = "PROJECT_SS_STASIS_CHAMBER",
     PROJECT_SS_ENGINE = "PROJECT_SS_ENGINE",
+    BUILDING_LIBRARY = 12,
+    BUILDING_ROYAL_LIBRARY = 13,
+    BUILDING_HARBOR = 14,
+    BUILDING_COTHON = 15,
   },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
@@ -190,7 +212,8 @@ local globals = {
           productionBuilding = 7, productionTurnsLeft = 9, productionStored = 140,
           yields = { YIELD_FOOD = 1450, YIELD_PRODUCTION = 980, YIELD_GOLD = 620,
                      YIELD_SCIENCE = 1130, YIELD_CULTURE = 400, YIELD_FAITH = 210 },
-          buildings = 14, defense = 3200, religion = 4, followers = 9 },
+          buildings = 14, defense = 3200, religion = 4, followers = 9,
+          freeBuildings = { [12] = 1 } },
         { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true,
           population = 8, foodStored = 12, foodTurnsLeft = 11,
           productionUnit = 5, productionTurnsLeft = 3, productionStored = 20,
@@ -198,7 +221,8 @@ local globals = {
           puppet = true, occupied = true, resistanceTurns = 3, blockaded = true },
         { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false,
           population = 5, foodStored = 8, foodTurnsLeft = 14,
-          productionTurnsLeft = 0, productionStored = 0, buildings = 4, defense = 900 },
+          productionTurnsLeft = 0, productionStored = 0, buildings = 4, defense = 900,
+          freeBuildings = { [14] = 1 } },
       },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5,
@@ -251,12 +275,24 @@ local globals = {
     Technologies = { [12] = { Type = "TECH_POTTERY" } },
     Units = { [5] = { Type = "UNIT_SETTLER" } },
     Projects = { [2] = { Type = "PROJECT_APOLLO_PROGRAM" } },
-    Buildings = {
+    Buildings = queryable({
       [7] = { Type = "BUILDING_PYRAMIDS", BuildingClass = "BUILDINGCLASS_PYRAMIDS" },
       [5] = { Type = "BUILDING_GRANARY", BuildingClass = "BUILDINGCLASS_GRANARY" },
       [8] = { Type = "BUILDING_NATIONAL_COLLEGE",
               BuildingClass = "BUILDINGCLASS_NATIONAL_COLLEGE" },
-    },
+      [11] = { Type = "BUILDING_GREAT_LIBRARY", BuildingClass = "BUILDINGCLASS_GREAT_LIBRARY",
+               FreeBuildingThisCity = "BUILDINGCLASS_LIBRARY" },
+      [12] = { Type = "BUILDING_LIBRARY", BuildingClass = "BUILDINGCLASS_LIBRARY" },
+      [13] = { Type = "BUILDING_ROYAL_LIBRARY", BuildingClass = "BUILDINGCLASS_LIBRARY" },
+      [14] = { Type = "BUILDING_HARBOR", BuildingClass = "BUILDINGCLASS_HARBOR" },
+      [15] = { Type = "BUILDING_COTHON", BuildingClass = "BUILDINGCLASS_HARBOR" },
+    }),
+    -- Carthage's trait, which names a building rather than its class. The
+    -- grant resolves per civ, so every version of that class is a candidate.
+    Traits = queryable({
+      [1] = { Type = "TRAIT_PHOENICIAN_HERITAGE", FreeBuilding = "BUILDING_HARBOR" },
+      [2] = { Type = "TRAIT_NONE" },
+    }),
     BuildingClasses = {
       BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
       BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
@@ -264,7 +300,7 @@ local globals = {
     },
     Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
-    Policies = { [6] = { Type = "POLICY_LIBERTY" } },
+    Policies = queryable({ [6] = { Type = "POLICY_LIBERTY" } }),
     PolicyBranchTypes = {
       [2] = { Type = "POLICY_BRANCH_HONOR" },
       [9] = { Type = "POLICY_BRANCH_FREEDOM" },
@@ -429,6 +465,32 @@ end)
 
 t.test("wonderClass is nil for ordinary buildings", function()
   t.assert_nil(civ.wonderClass(5))
+end)
+
+t.test("grantableBuildings expands every grantable class to all its versions", function()
+  t.assert_deep_equal({
+    { id = 15, type = "BUILDING_COTHON" },
+    { id = 14, type = "BUILDING_HARBOR" },
+    { id = 12, type = "BUILDING_LIBRARY" },
+    { id = 13, type = "BUILDING_ROYAL_LIBRARY" },
+  }, (civ.grantableBuildings()))
+end)
+
+t.test("grantableBuildings also names the classes it covers", function()
+  local _, classes = civ.grantableBuildings()
+  t.assert_deep_equal({ "BUILDINGCLASS_HARBOR", "BUILDINGCLASS_LIBRARY" }, classes)
+end)
+
+t.test("freeBuildings reports what a city was given, never what it built", function()
+  t.assert_deep_equal({
+    { id = 3, name = "Warsaw", buildings = { "BUILDING_LIBRARY" } },
+    { id = 7, name = "Rome (captured)", buildings = {} },
+    { id = 9, name = "Krakow", buildings = { "BUILDING_HARBOR" } },
+  }, civ.freeBuildings(0, (civ.grantableBuildings())))
+end)
+
+t.test("freeBuildings is empty for a city-state", function()
+  t.assert_deep_equal({}, civ.freeBuildings(3, (civ.grantableBuildings())))
 end)
 
 t.test("unitType resolves a unit instance to its Type string", function()
