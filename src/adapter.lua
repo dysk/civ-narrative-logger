@@ -511,23 +511,61 @@ function M.new(g)
     return candidates, classes
   end
 
+  -- Every building the ruleset defines. Too many to ask a city about every
+  -- turn, but a city founded this turn is worth one full look: it was
+  -- built by nobody, so whatever stands in it was handed over.
+  function civ.allBuildings()
+    local types = {}
+    for row in g.GameInfo.Buildings() do table.insert(types, row.Type) end
+    table.sort(types)
+
+    local buildings = {}
+    for _, buildingType in ipairs(types) do
+      table.insert(buildings, { id = g.GameInfoTypes[buildingType], type = buildingType })
+    end
+    return buildings
+  end
+
+  local function standing(city, buildings, count)
+    local held = {}
+    for _, building in ipairs(buildings) do
+      if count(city, building.id) > 0 then table.insert(held, building.type) end
+    end
+    return held
+  end
+
+  local function freeCount(city, id) return city:GetNumFreeBuilding(id) end
+  local function anyCount(city, id) return city:GetNumBuilding(id) end
+
   -- What each city was given rather than built. GetNumBuildings() counts
   -- only real buildings (ChangeNumBuildings is reached from
   -- SetNumRealBuilding alone), so there is no cheaper gate than asking.
+  -- The two turns travel with the city: a captured one keeps the founding
+  -- turn of whoever founded it (CvPlayer.cpp:2851), so they agree only for
+  -- a city this player founded.
   function civ.freeBuildings(playerId, candidates)
     local p = g.Players[playerId]
     if not isLivingMajor(p) then return {} end
     local cities = {}
     for city in p:Cities() do
-      local buildings = {}
-      for _, candidate in ipairs(candidates) do
-        if city:GetNumFreeBuilding(candidate.id) > 0 then
-          table.insert(buildings, candidate.type)
-        end
-      end
-      table.insert(cities, { id = city:GetID(), name = city:GetName(), buildings = buildings })
+      table.insert(cities, {
+        id = city:GetID(),
+        name = city:GetName(),
+        founded = city:GetGameTurnFounded(),
+        acquired = city:GetGameTurnAcquired(),
+        buildings = standing(city, candidates, freeCount),
+      })
     end
     return cities
+  end
+
+  -- Everything one city holds, free or real. Mod scripts hand out real
+  -- buildings through SetNumRealBuildingClass without firing any hook, so
+  -- a free-building scan alone would miss them.
+  function civ.cityBuildings(playerId, cityId, buildings)
+    local city = g.Players[playerId]:GetCityByID(cityId)
+    if not city then return {} end
+    return standing(city, buildings, anyCount)
   end
 
   function civ.livingMajors()

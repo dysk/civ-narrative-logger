@@ -18,6 +18,45 @@ local function queryable(rows)
   })
 end
 
+local function fakeCity(c)
+  return {
+        IsOriginalMajorCapital = function() return c.capital == true end,
+        GetOriginalOwner = function() return c.originalOwner end,
+        GetID = function() return c.id end,
+        GetName = function() return c.name end,
+        GetX = function() return c.x end,
+        GetY = function() return c.y end,
+        GetPopulation = function() return c.population end,
+        GetFood = function() return c.foodStored end,
+        GetFoodTurnsLeft = function() return c.foodTurnsLeft end,
+        GetYieldRateTimes100 = function(_, yield) return (c.yields or {})[yield] or 0 end,
+        GetProductionUnit = function() return c.productionUnit or -1 end,
+        GetProductionBuilding = function() return c.productionBuilding or -1 end,
+        GetProductionProject = function() return c.productionProject or -1 end,
+        GetProductionTurnsLeft = function() return c.productionTurnsLeft end,
+        GetProduction = function() return c.productionStored end,
+        GetNumBuildings = function() return c.buildings end,
+        GetNumFreeBuilding = function(_, id) return (c.freeBuildings or {})[id] or 0 end,
+        GetNumBuilding = function(_, id)
+          return ((c.freeBuildings or {})[id] or 0) + ((c.realBuildings or {})[id] or 0)
+        end,
+        GetGameTurnFounded = function() return c.founded end,
+        GetGameTurnAcquired = function() return c.acquired end,
+        GetDamage = function() return c.damage or 0 end,
+        GetStrengthValue = function() return c.defense end,
+        IsPuppet = function() return c.puppet == true end,
+        IsOccupied = function() return c.occupied == true end,
+        IsRazing = function() return c.razing == true end,
+        GetResistanceTurns = function() return c.resistanceTurns or 0 end,
+        IsBlockaded = function() return c.blockaded == true end,
+        GetReligiousMajority = function() return c.religion or -1 end,
+        GetNumFollowers = function(_, religion)
+          return religion == c.religion and c.followers or 0
+        end,
+        IsCapital = function() return c.isCapital == true end,
+  }
+end
+
 local function fakePlayer(spec)
   return {
     IsAlive = function() return spec.alive ~= false end,
@@ -39,11 +78,6 @@ local function fakePlayer(spec)
     GetTotalPopulation = function() return spec.population end,
     GetMilitaryMight = function() return spec.might end,
     GetNumMilitaryUnits = function() return spec.militaryUnits end,
-    GetCityByID = function(_, id)
-      if id == spec.cityId then
-        return { GetName = function() return spec.cityName end }
-      end
-    end,
     GetUnitByID = function(_, id)
       if id == spec.unitId then
         return { GetUnitType = function() return spec.unitTypeId end }
@@ -95,39 +129,12 @@ local function fakePlayer(spec)
       local i = 0
       return function()
         i = i + 1
-        local c = list[i]
-        if not c then return nil end
-        return {
-          IsOriginalMajorCapital = function() return c.capital == true end,
-          GetOriginalOwner = function() return c.originalOwner end,
-          GetID = function() return c.id end,
-          GetName = function() return c.name end,
-          GetX = function() return c.x end,
-          GetY = function() return c.y end,
-          GetPopulation = function() return c.population end,
-          GetFood = function() return c.foodStored end,
-          GetFoodTurnsLeft = function() return c.foodTurnsLeft end,
-          GetYieldRateTimes100 = function(_, yield) return (c.yields or {})[yield] or 0 end,
-          GetProductionUnit = function() return c.productionUnit or -1 end,
-          GetProductionBuilding = function() return c.productionBuilding or -1 end,
-          GetProductionProject = function() return c.productionProject or -1 end,
-          GetProductionTurnsLeft = function() return c.productionTurnsLeft end,
-          GetProduction = function() return c.productionStored end,
-          GetNumBuildings = function() return c.buildings end,
-          GetNumFreeBuilding = function(_, id) return (c.freeBuildings or {})[id] or 0 end,
-          GetDamage = function() return c.damage or 0 end,
-          GetStrengthValue = function() return c.defense end,
-          IsPuppet = function() return c.puppet == true end,
-          IsOccupied = function() return c.occupied == true end,
-          IsRazing = function() return c.razing == true end,
-          GetResistanceTurns = function() return c.resistanceTurns or 0 end,
-          IsBlockaded = function() return c.blockaded == true end,
-          GetReligiousMajority = function() return c.religion or -1 end,
-          GetNumFollowers = function(_, religion)
-            return religion == c.religion and c.followers or 0
-          end,
-          IsCapital = function() return c.isCapital == true end,
-        }
+        return list[i] and fakeCity(list[i]) or nil
+      end
+    end,
+    GetCityByID = function(_, id)
+      for _, c in ipairs(spec.citiesList or {}) do
+        if c.id == id then return fakeCity(c) end
       end
     end,
   }
@@ -183,6 +190,10 @@ local globals = {
     BUILDING_GARDEN = 17,
     BUILDING_MONUMENT = 18,
     BUILDING_SCRIPTORIUM = 19,
+    BUILDING_GRANARY = 5,
+    BUILDING_PYRAMIDS = 7,
+    BUILDING_NATIONAL_COLLEGE = 8,
+    BUILDING_GREAT_LIBRARY = 11,
   },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
@@ -217,16 +228,17 @@ local globals = {
           yields = { YIELD_FOOD = 1450, YIELD_PRODUCTION = 980, YIELD_GOLD = 620,
                      YIELD_SCIENCE = 1130, YIELD_CULTURE = 400, YIELD_FAITH = 210 },
           buildings = 14, defense = 3200, religion = 4, followers = 9,
-          freeBuildings = { [12] = 1 } },
+          founded = 1, acquired = 1, freeBuildings = { [12] = 1 } },
         { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true,
           population = 8, foodStored = 12, foodTurnsLeft = 11,
           productionUnit = 5, productionTurnsLeft = 3, productionStored = 20,
           buildings = 9, defense = 1800, damage = 45,
-          puppet = true, occupied = true, resistanceTurns = 3, blockaded = true },
+          puppet = true, occupied = true, resistanceTurns = 3, blockaded = true,
+          founded = 12, acquired = 88, realBuildings = { [18] = 1 } },
         { id = 9, name = "Krakow", x = 11, y = 21, originalOwner = 1, capital = false,
           population = 5, foodStored = 8, foodTurnsLeft = 14,
           productionTurnsLeft = 0, productionStored = 0, buildings = 4, defense = 900,
-          freeBuildings = { [14] = 1 } },
+          founded = 40, acquired = 40, freeBuildings = { [14] = 1 } },
       },
     }),
     [1] = fakePlayer({ civ = "Rome", team = 1, name = "Augustus", handicap = 5,
@@ -532,10 +544,38 @@ end)
 
 t.test("freeBuildings reports what a city was given, never what it built", function()
   t.assert_deep_equal({
-    { id = 3, name = "Warsaw", buildings = { "BUILDING_LIBRARY" } },
-    { id = 7, name = "Rome (captured)", buildings = {} },
-    { id = 9, name = "Krakow", buildings = { "BUILDING_HARBOR" } },
+    { id = 3, name = "Warsaw", founded = 1, acquired = 1, buildings = { "BUILDING_LIBRARY" } },
+    { id = 7, name = "Rome (captured)", founded = 12, acquired = 88, buildings = {} },
+    { id = 9, name = "Krakow", founded = 40, acquired = 40, buildings = { "BUILDING_HARBOR" } },
   }, civ.freeBuildings(0, (civ.grantableBuildings())))
+end)
+
+t.test("allBuildings lists every building the game defines, id and type", function()
+  t.assert_deep_equal({
+    { id = 16, type = "BUILDING_AQUEDUCT" },
+    { id = 15, type = "BUILDING_COTHON" },
+    { id = 17, type = "BUILDING_GARDEN" },
+    { id = 5, type = "BUILDING_GRANARY" },
+    { id = 11, type = "BUILDING_GREAT_LIBRARY" },
+    { id = 14, type = "BUILDING_HARBOR" },
+    { id = 12, type = "BUILDING_LIBRARY" },
+    { id = 18, type = "BUILDING_MONUMENT" },
+    { id = 8, type = "BUILDING_NATIONAL_COLLEGE" },
+    { id = 7, type = "BUILDING_PYRAMIDS" },
+    { id = 13, type = "BUILDING_ROYAL_LIBRARY" },
+    { id = 19, type = "BUILDING_SCRIPTORIUM" },
+  }, civ.allBuildings())
+end)
+
+t.test("cityBuildings answers with what stands, built or given", function()
+  t.assert_deep_equal(
+    { "BUILDING_MONUMENT" },
+    civ.cityBuildings(0, 7, civ.allBuildings())
+  )
+end)
+
+t.test("cityBuildings is empty for a city the player does not hold", function()
+  t.assert_deep_equal({}, civ.cityBuildings(0, 99, civ.allBuildings()))
 end)
 
 t.test("freeBuildings is empty for a city-state", function()

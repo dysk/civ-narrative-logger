@@ -567,23 +567,61 @@ function M.new(g)
     return candidates, classes
   end
 
+  -- Every building the ruleset defines. Too many to ask a city about every
+  -- turn, but a city founded this turn is worth one full look: it was
+  -- built by nobody, so whatever stands in it was handed over.
+  function civ.allBuildings()
+    local types = {}
+    for row in g.GameInfo.Buildings() do table.insert(types, row.Type) end
+    table.sort(types)
+
+    local buildings = {}
+    for _, buildingType in ipairs(types) do
+      table.insert(buildings, { id = g.GameInfoTypes[buildingType], type = buildingType })
+    end
+    return buildings
+  end
+
+  local function standing(city, buildings, count)
+    local held = {}
+    for _, building in ipairs(buildings) do
+      if count(city, building.id) > 0 then table.insert(held, building.type) end
+    end
+    return held
+  end
+
+  local function freeCount(city, id) return city:GetNumFreeBuilding(id) end
+  local function anyCount(city, id) return city:GetNumBuilding(id) end
+
   -- What each city was given rather than built. GetNumBuildings() counts
   -- only real buildings (ChangeNumBuildings is reached from
   -- SetNumRealBuilding alone), so there is no cheaper gate than asking.
+  -- The two turns travel with the city: a captured one keeps the founding
+  -- turn of whoever founded it (CvPlayer.cpp:2851), so they agree only for
+  -- a city this player founded.
   function civ.freeBuildings(playerId, candidates)
     local p = g.Players[playerId]
     if not isLivingMajor(p) then return {} end
     local cities = {}
     for city in p:Cities() do
-      local buildings = {}
-      for _, candidate in ipairs(candidates) do
-        if city:GetNumFreeBuilding(candidate.id) > 0 then
-          table.insert(buildings, candidate.type)
-        end
-      end
-      table.insert(cities, { id = city:GetID(), name = city:GetName(), buildings = buildings })
+      table.insert(cities, {
+        id = city:GetID(),
+        name = city:GetName(),
+        founded = city:GetGameTurnFounded(),
+        acquired = city:GetGameTurnAcquired(),
+        buildings = standing(city, candidates, freeCount),
+      })
     end
     return cities
+  end
+
+  -- Everything one city holds, free or real. Mod scripts hand out real
+  -- buildings through SetNumRealBuildingClass without firing any hook, so
+  -- a free-building scan alone would miss them.
+  function civ.cityBuildings(playerId, cityId, buildings)
+    local city = g.Players[playerId]:GetCityByID(cityId)
+    if not city then return {} end
+    return standing(city, buildings, anyCount)
   end
 
   function civ.livingMajors()
@@ -1486,15 +1524,17 @@ local function setOf(list)
 end
 
 function M.new(civ, sink)
-  local known, candidates = {}, nil
+  local known, candidates, everything = {}, nil, nil
 
   local function announce(turn)
     local classes
     candidates, classes = civ.grantableBuildings()
+    everything = civ.allBuildings()
     sink(json.encode({
       event = "free_buildings_ready",
       turn = turn,
       buildings = #candidates,
+      all_buildings = #everything,
       classes = classes,
     }))
   end
@@ -1508,17 +1548,43 @@ function M.new(civ, sink)
   end
 
   -- City ids come back from a free list, so an id alone does not say the
-  -- city is the one we saw last turn.
+  -- city is the one we saw last turn. Nothing means we have never looked
+  -- at this city.
   local function heldLastTurn(playerId, city)
     local previous = (known[playerId] or {})[city.id]
     if previous and previous.name == city.name then return previous.buildings end
-    return {}
   end
 
-  local function grant(turn, name, city, building)
+  -- A captured city keeps the founding turn of whoever founded it
+  -- (CvPlayer.cpp:2851), so the two turns agree only for a city this
+  -- player founded. A city founded during the last turn is first seen now.
+  local function foundedSincePoll(city, turn)
+    return city.founded == city.acquired and city.founded >= turn - 1
+  end
+
+  local function grant(turn, name, city, building, source)
     sink(json.encode({
-      event = "building_granted", turn = turn, civ = name, city = city, building = building,
+      event = "building_granted", turn = turn, civ = name,
+      city = city, building = building, source = source,
     }))
+  end
+
+  -- A city founded since the last poll was built by nobody, so everything
+  -- standing in it was handed over - including the real buildings mod
+  -- scripts add through SetNumRealBuildingClass, which fire no hook and
+  -- never show up as free. Every other city is a diff, and a city first
+  -- seen without having just been founded is somebody else's work.
+  local function report(playerId, city, turn, name)
+    local before = heldLastTurn(playerId, city)
+    if before then
+      for _, building in ipairs(city.buildings) do
+        if not before[building] then grant(turn, name, city.name, building, "diff") end
+      end
+    elseif foundedSincePoll(city, turn) then
+      for _, building in ipairs(civ.cityBuildings(playerId, city.id, everything)) do
+        grant(turn, name, city.name, building, "new_city")
+      end
+    end
   end
 
   local function poll(playerId)
@@ -1527,10 +1593,7 @@ function M.new(civ, sink)
     local silent, current = seeding(playerId, turn), {}
 
     for _, city in ipairs(civ.freeBuildings(playerId, candidates)) do
-      local before = heldLastTurn(playerId, city)
-      for _, building in ipairs(city.buildings) do
-        if not silent and not before[building] then grant(turn, name, city.name, building) end
-      end
+      if not silent then report(playerId, city, turn, name) end
       current[city.id] = { name = city.name, buildings = setOf(city.buildings) }
     end
     known[playerId] = current

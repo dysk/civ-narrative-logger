@@ -309,6 +309,34 @@ start of a game nothing has been granted yet, so there is nothing to
 seed and everything to report, and a capital founded before the first
 `PlayerDoTurn` would otherwise be swallowed.
 
+A third family of rule needed a different answer entirely. Lekmod hands
+out some buildings from its own Lua: `POLICY_RESETTLEMENT` gives a newly
+founded city a Workshop, Granary, Aqueduct, Monument and Library through
+`SetNumRealBuildingClass` (`LEKMOD/Lua/Lekmod_policies.lua:4-21`). Those
+are *real* buildings, so `GetNumFreeBuilding` reads zero, and the Lua
+setter is nowhere near the three `CityConstructed` call sites. No scan of
+free buildings can ever see them.
+
+What can see them is the city's own age. A city founded since the last
+poll was built by nobody, so everything standing in it was handed over -
+whatever the mechanism, DLL or mod script, free or real. That city gets
+one scan of every building the ruleset defines, which is affordable
+precisely because it happens once per city rather than once per turn.
+Telling a founded city from a captured one is the DLL's own bookkeeping:
+a captured city keeps the founding turn of whoever founded it
+(`CvPlayer.cpp:2851`) while its acquired turn moves, so the two agreeing
+means this player founded it.
+
+One case defeats that test, and the record says so rather than guessing.
+Buying out a city-state is deliberately dressed up as a founding
+(`CvPlayer.cpp:2836-2843`: previous owner cleared, original owner set to
+the buyer, founding turn set to now) while the city keeps everything it
+had. Every grant therefore carries `source`: `new_city` for "this stood
+in a city we had never seen, which had just been founded", `diff` for
+"this appeared between two turns". A buyout produces a burst of
+`new_city` records that a reader can recognise and drop, which is the
+repo's standing trade - capture everything, filter downstream.
+
 Two consequences to know downstream. A grant made while a player acts
 lands in the log on the following turn, because `PlayerDoTurn` for that
 turn has already fired - a city founded on turn 40 reports its free

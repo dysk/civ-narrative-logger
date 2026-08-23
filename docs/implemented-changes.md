@@ -235,9 +235,16 @@ having built it, and one `free_buildings_ready` per session naming the
 candidate set it will scan.
 
 ```json
-{"buildings":45,"classes":["BUILDINGCLASS_CASTLE", ...],"event":"free_buildings_ready","turn":0}
-{"building":"BUILDING_UNIVERSITY","city":"Babylon","civ":"Babylon","event":"building_granted","turn":74}
+{"all_buildings":412,"buildings":135,"classes":["BUILDINGCLASS_AQUEDUCT", ...],"event":"free_buildings_ready","turn":0}
+{"building":"BUILDING_UNIVERSITY","city":"Babylon","civ":"Babylon","event":"building_granted","source":"diff","turn":74}
+{"building":"BUILDING_WORKSHOP","city":"Akkad","civ":"Babylon","event":"building_granted","source":"new_city","turn":41}
 ```
+
+`source` says how the poller knows: `diff` for a building that appeared
+between two turns, `new_city` for one standing in a city we had never
+seen that had just been founded. A city-state buyout looks like a
+founding to the DLL and keeps its buildings, so it emits a burst of
+`new_city` records that a reader should drop.
 
 `civ.grantableBuildings` reads the six schema columns that name a granted
 building plus the four policy counters whose building the DLL chooses,
