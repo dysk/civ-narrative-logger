@@ -52,6 +52,7 @@ the game globals as a parameter and is tested against fakes.
 | `src/logger.lua` | subscribes extractors to hooks, streams JSON to a sink |
 | `src/census.lua` | per-player city census, emits `city_destroyed` |
 | `src/cities.lua` | per-city, per-turn `city_snapshot` records |
+| `src/free_buildings.lua` | per-turn poll for buildings nobody built, emits `building_granted` |
 | `src/roster.lua` | per-turn roster poll, emits `player_eliminated` |
 | `src/congress.lua` | per-turn World Congress poll, diffs it into events |
 | `src/victory.lua` | one-shot `game_ended` watcher on `GameCoreTestVictory` |

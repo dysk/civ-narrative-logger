@@ -226,3 +226,25 @@ remembers the vote carrying, so the record was corrected to
 
 Consumer fallback: none. A passed one-shot resolution left no trace in
 any event the analyst received.
+
+## Free buildings
+
+`src/free_buildings.lua`, registered on `PlayerDoTurn` beside the other
+pollers, emits `building_granted` for a building a city holds without
+having built it, and one `free_buildings_ready` per session naming the
+candidate set it will scan.
+
+```json
+{"buildings":45,"classes":["BUILDINGCLASS_CASTLE", ...],"event":"free_buildings_ready","turn":0}
+{"building":"BUILDING_UNIVERSITY","city":"Babylon","civ":"Babylon","event":"building_granted","turn":74}
+```
+
+`civ.grantableBuildings` reads the six schema columns that grant
+buildings and expands each to every version of its class; `civ.freeBuildings`
+asks each city `GetNumFreeBuilding` for those candidates. The why, the
+cost and the seeding rule are in `design-decisions.md`.
+
+Consumer fallback: the analyst carries `EarlyGame::GRANTED_BY`, which
+accepts Angkor Wat as evidence of the University it grants. That covers
+logs recorded before this change - `examples/babylon-domination.jsonl`
+among them - and stays until they are all replaced.
