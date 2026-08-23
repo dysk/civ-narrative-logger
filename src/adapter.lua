@@ -51,11 +51,21 @@ function M.new(g)
     return g.GameInfo.Buildings[buildingId].Type
   end
 
-  function civ.wonderClass(buildingId)
-    local class = g.GameInfo.Buildings[buildingId].BuildingClass
+  -- Whether a column is set at all: the game hands booleans back as
+  -- booleans or as the 0/1 they are stored as, and a count of nothing
+  -- reads the same way.
+  local function isSet(value)
+    return value ~= nil and value ~= false and value ~= 0
+  end
+
+  local function wonderScope(class)
     local limits = g.GameInfo.BuildingClasses[class]
     if limits.MaxGlobalInstances > 0 then return "world" end
     if limits.MaxPlayerInstances > 0 then return "national" end
+  end
+
+  function civ.wonderClass(buildingId)
+    return wonderScope(g.GameInfo.Buildings[buildingId].BuildingClass)
   end
 
   function civ.unitType(playerId, unitId)
@@ -404,6 +414,18 @@ function M.new(g)
   -- A column names either a class or one civ's version of it. The grant
   -- always resolves to the owner's version (CvCity.cpp:7391), so the class
   -- is what a rule really points at.
+  -- Policies that grant a building without naming one: the schema carries
+  -- a count and the DLL picks the building (CvPlayer::AwardFreeBuildings).
+  -- Each entry mirrors what that chooser can return. Free walls are
+  -- missing on purpose - they are handed over as a real building
+  -- (CvPlayer.cpp:8631), which no scan of free buildings can see.
+  local COUNTED_COLUMNS = {
+    NumCitiesFreeFoodBuilding      = { "BUILDINGCLASS_AQUEDUCT" },
+    NumCitiesFreePietyGardens      = { "BUILDINGCLASS_GARDEN" },
+    NumCitiesFreeAestheticsSchools = { "BUILDING_SCRIPTORIUM", "BUILDING_GALLERY",
+                                       "BUILDING_CONSERVATORY" },
+  }
+
   local function collectClasses(classes, rows, columns, classOf)
     for row in rows() do
       for _, column in ipairs(columns) do
@@ -413,12 +435,40 @@ function M.new(g)
     end
   end
 
+  -- CvCity::ChooseFreeCultureBuilding weighs culture against cost across
+  -- every non-wonder building, so any of them can be the one handed over.
+  local function cultureClasses(classes, classOf)
+    local rows = g.GameInfo.Building_YieldChanges
+    if not rows then return end
+    for row in rows() do
+      local class = classOf[row.BuildingType]
+      if row.YieldType == "YIELD_CULTURE" and row.Yield > 0
+        and class and not wonderScope(class) then
+        classes[class] = true
+      end
+    end
+  end
+
+  local function collectCounted(classes, classOf)
+    local rows = g.GameInfo.Policies
+    if not rows then return end
+    for row in rows() do
+      for column, chosen in pairs(COUNTED_COLUMNS) do
+        if isSet(row[column]) then
+          for _, value in ipairs(chosen) do classes[classOf[value] or value] = true end
+        end
+      end
+      if isSet(row.NumCitiesFreeCultureBuilding) then cultureClasses(classes, classOf) end
+    end
+  end
+
   local function grantableClasses(classOf)
     local classes = {}
     for tableName, columns in pairs(FREE_BUILDING_COLUMNS) do
       local rows = g.GameInfo[tableName]
       if rows then collectClasses(classes, rows, columns, classOf) end
     end
+    collectCounted(classes, classOf)
     return classes
   end
 
@@ -433,12 +483,22 @@ function M.new(g)
   -- from for the poller to announce. Every version of a grantable class is
   -- a candidate, which is what saves us from resolving class to building
   -- per player.
+  -- A rule may point at something this ruleset does not define; the class
+  -- list is what we will really scan, so those drop out of both.
+  local function scannable(classes, byClass)
+    local kept = {}
+    for _, class in ipairs(classes) do
+      if byClass[class] then table.insert(kept, class) end
+    end
+    return kept
+  end
+
   function civ.grantableBuildings()
     local byClass, classOf = buildingIndex()
-    local classes = sortedKeys(grantableClasses(classOf))
+    local classes = scannable(sortedKeys(grantableClasses(classOf)), byClass)
     local types = {}
     for _, class in ipairs(classes) do
-      for _, buildingType in ipairs(byClass[class] or {}) do
+      for _, buildingType in ipairs(byClass[class]) do
         table.insert(types, buildingType)
       end
     end
@@ -611,12 +671,6 @@ function M.new(g)
     "GreatPersonTileImprovementCulture",
     "LandmarkCulture",
   }
-
-  -- Whether the game hands a boolean column back as a boolean or as the
-  -- 0/1 it is stored as is not worth depending on.
-  local function isSet(value)
-    return value ~= nil and value ~= false and value ~= 0
-  end
 
   local function hasOngoingEffects(row)
     for _, column in ipairs(ongoingEffectColumns) do

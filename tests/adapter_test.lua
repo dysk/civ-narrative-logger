@@ -179,6 +179,10 @@ local globals = {
     BUILDING_ROYAL_LIBRARY = 13,
     BUILDING_HARBOR = 14,
     BUILDING_COTHON = 15,
+    BUILDING_AQUEDUCT = 16,
+    BUILDING_GARDEN = 17,
+    BUILDING_MONUMENT = 18,
+    BUILDING_SCRIPTORIUM = 19,
   },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
@@ -286,6 +290,16 @@ local globals = {
       [13] = { Type = "BUILDING_ROYAL_LIBRARY", BuildingClass = "BUILDINGCLASS_LIBRARY" },
       [14] = { Type = "BUILDING_HARBOR", BuildingClass = "BUILDINGCLASS_HARBOR" },
       [15] = { Type = "BUILDING_COTHON", BuildingClass = "BUILDINGCLASS_HARBOR" },
+      [16] = { Type = "BUILDING_AQUEDUCT", BuildingClass = "BUILDINGCLASS_AQUEDUCT" },
+      [17] = { Type = "BUILDING_GARDEN", BuildingClass = "BUILDINGCLASS_GARDEN" },
+      [18] = { Type = "BUILDING_MONUMENT", BuildingClass = "BUILDINGCLASS_MONUMENT" },
+      [19] = { Type = "BUILDING_SCRIPTORIUM", BuildingClass = "BUILDINGCLASS_SCRIPTORIUM" },
+    }),
+    -- What ChooseFreeCultureBuilding weighs: culture per cost, wonders out.
+    Building_YieldChanges = queryable({
+      [1] = { BuildingType = "BUILDING_MONUMENT", YieldType = "YIELD_CULTURE", Yield = 2 },
+      [2] = { BuildingType = "BUILDING_PYRAMIDS", YieldType = "YIELD_CULTURE", Yield = 3 },
+      [3] = { BuildingType = "BUILDING_LIBRARY", YieldType = "YIELD_SCIENCE", Yield = 3 },
     }),
     -- Carthage's trait, which names a building rather than its class. The
     -- grant resolves per civ, so every version of that class is a candidate.
@@ -297,10 +311,23 @@ local globals = {
       BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
       BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
       BUILDINGCLASS_NATIONAL_COLLEGE = { MaxGlobalInstances = -1, MaxPlayerInstances = 1 },
+      BUILDINGCLASS_GREAT_LIBRARY = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_LIBRARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_HARBOR = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_AQUEDUCT = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_GARDEN = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_MONUMENT = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_SCRIPTORIUM = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
     },
     Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
-    Policies = queryable({ [6] = { Type = "POLICY_LIBERTY" } }),
+    Policies = queryable({
+      [6] = { Type = "POLICY_LIBERTY" },
+      [20] = { Type = "POLICY_TRADITION_FINISHER", NumCitiesFreeFoodBuilding = 4 },
+      [21] = { Type = "POLICY_LEGALISM", NumCitiesFreeCultureBuilding = 4 },
+      [22] = { Type = "POLICY_PIETY_FINISHER", NumCitiesFreePietyGardens = 4 },
+      [23] = { Type = "POLICY_FINE_ARTS", NumCitiesFreeAestheticsSchools = 99 },
+    }),
     PolicyBranchTypes = {
       [2] = { Type = "POLICY_BRANCH_HONOR" },
       [9] = { Type = "POLICY_BRANCH_FREEDOM" },
@@ -467,18 +494,40 @@ t.test("wonderClass is nil for ordinary buildings", function()
   t.assert_nil(civ.wonderClass(5))
 end)
 
+local function grantableClassSet()
+  local _, classes = civ.grantableBuildings()
+  local set = {}
+  for _, class in ipairs(classes) do set[class] = true end
+  return set
+end
+
 t.test("grantableBuildings expands every grantable class to all its versions", function()
   t.assert_deep_equal({
+    { id = 16, type = "BUILDING_AQUEDUCT" },
     { id = 15, type = "BUILDING_COTHON" },
+    { id = 17, type = "BUILDING_GARDEN" },
     { id = 14, type = "BUILDING_HARBOR" },
     { id = 12, type = "BUILDING_LIBRARY" },
+    { id = 18, type = "BUILDING_MONUMENT" },
     { id = 13, type = "BUILDING_ROYAL_LIBRARY" },
+    { id = 19, type = "BUILDING_SCRIPTORIUM" },
   }, (civ.grantableBuildings()))
 end)
 
 t.test("grantableBuildings also names the classes it covers", function()
   local _, classes = civ.grantableBuildings()
-  t.assert_deep_equal({ "BUILDINGCLASS_HARBOR", "BUILDINGCLASS_LIBRARY" }, classes)
+  t.assert_deep_equal({
+    "BUILDINGCLASS_AQUEDUCT", "BUILDINGCLASS_GARDEN", "BUILDINGCLASS_HARBOR",
+    "BUILDINGCLASS_LIBRARY", "BUILDINGCLASS_MONUMENT", "BUILDINGCLASS_SCRIPTORIUM",
+  }, classes)
+end)
+
+t.test("grantableBuildings leaves out a wonder that happens to yield culture", function()
+  t.assert_nil(grantableClassSet()["BUILDINGCLASS_PYRAMIDS"])
+end)
+
+t.test("grantableBuildings leaves out a chosen building the game does not define", function()
+  t.assert_nil(grantableClassSet()["BUILDING_GALLERY"])
 end)
 
 t.test("freeBuildings reports what a city was given, never what it built", function()

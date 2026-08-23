@@ -254,12 +254,36 @@ the per-building question.
 
 Asking it of every building type would be ~500 questions per city per
 turn. Instead `civ.grantableBuildings` derives, once, the buildings any
-rule can grant, by reading the columns that grant them - `Buildings`
+rule can grant, and asks only about those - a scan the same order of
+magnitude as the field count `cities.lua` already reads per city. Turn
+time on a pitboss server is the reason to keep it narrow; the full scan
+is the fallback if the derivation ever gets too hard to trust.
+
+Two families of rule have to be read, and the second one cost us a miss
+before it was understood. The first names a building: `Buildings`
 (`FreeBuildingThisCity`, `FreeBuilding`), `Traits` (`FreeBuilding`,
-`FreeCapitalBuilding`, `FreeBuildingOnConquest`) and `Policies`
-(`FreeBuildingOnConquest`). In Lekmod that is 17 classes, about 45
-concrete buildings, the same order of magnitude as the field count
-`cities.lua` already reads per city.
+`FreeCapitalBuilding`, `FreeBuildingOnConquest`), `Policies`
+(`FreeBuildingOnConquest`). Those six are the complete set of columns in
+the info classes that point at a building.
+
+The second only counts them, and the DLL picks: `CvPlayer::AwardFreeBuildings`
+(`CvPlayer.cpp:8586-8666`) reads five counters off the adopted policies
+and calls a chooser for each. `POLICY_TRADITION_FINISHER` carries
+`NumCitiesFreeFoodBuilding=4`, and which building that is lives in
+`CvCity::ChooseFreeFoodBuilding` - under `#define AQUEDUCT_FIX`
+(`_Defines.h:1263`), the aqueduct class. Nothing in the schema says so,
+so the first version of this poller watched Carthage's free harbours
+correctly and missed every free aqueduct in the game.
+
+`COUNTED_COLUMNS` mirrors the four choosers that matter:
+`NumCitiesFreeFoodBuilding` to the aqueduct class,
+`NumCitiesFreePietyGardens` to the garden class,
+`NumCitiesFreeAestheticsSchools` to Scriptorium, Gallery and
+Conservatory, and `NumCitiesFreeCultureBuilding` to every non-wonder
+class with a culture yield, because `ChooseFreeCultureBuilding` weighs
+culture against cost across all of them. `NumCitiesFreeWalls` is left
+out deliberately: it hands over a *real* building (`CvPlayer.cpp:8631`),
+which no scan of free buildings can see, and no Lekmod policy uses it.
 
 The set is expanded by class rather than resolved per player. A column
 may name a class or one civ's version of it, and the grant resolves to

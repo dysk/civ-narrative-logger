@@ -239,10 +239,17 @@ candidate set it will scan.
 {"building":"BUILDING_UNIVERSITY","city":"Babylon","civ":"Babylon","event":"building_granted","turn":74}
 ```
 
-`civ.grantableBuildings` reads the six schema columns that grant
-buildings and expands each to every version of its class; `civ.freeBuildings`
-asks each city `GetNumFreeBuilding` for those candidates. The why, the
-cost and the seeding rule are in `design-decisions.md`.
+`civ.grantableBuildings` reads the six schema columns that name a granted
+building plus the four policy counters whose building the DLL chooses,
+and expands each to every version of its class; `civ.freeBuildings` asks
+each city `GetNumFreeBuilding` for those candidates. The why, the cost
+and the seeding rule are in `design-decisions.md`.
+
+The counters were added after the first real game: Carthage's free
+harbours came through on turn 1, the Tradition finisher's aqueducts did
+not, because `NumCitiesFreeFoodBuilding` counts a building without ever
+naming one. Legalism's culture buildings and Fine Arts' schools were the
+same shape and are covered by the same change.
 
 Consumer fallback: the analyst carries `EarlyGame::GRANTED_BY`, which
 accepts Angkor Wat as evidence of the University it grants. That covers
