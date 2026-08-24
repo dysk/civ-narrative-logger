@@ -194,6 +194,7 @@ local globals = {
     BUILDING_PYRAMIDS = 7,
     BUILDING_NATIONAL_COLLEGE = 8,
     BUILDING_GREAT_LIBRARY = 11,
+    BUILDING_OXFORD_UNIVERSITY = 20,
   },
   GameDefines = { MAX_CIV_PLAYERS = 3 },
   Players = {
@@ -306,12 +307,16 @@ local globals = {
       [17] = { Type = "BUILDING_GARDEN", BuildingClass = "BUILDINGCLASS_GARDEN" },
       [18] = { Type = "BUILDING_MONUMENT", BuildingClass = "BUILDINGCLASS_MONUMENT" },
       [19] = { Type = "BUILDING_SCRIPTORIUM", BuildingClass = "BUILDINGCLASS_SCRIPTORIUM" },
+      [20] = { Type = "BUILDING_OXFORD_UNIVERSITY",
+               BuildingClass = "BUILDINGCLASS_OXFORD_UNIVERSITY" },
     }),
     -- What ChooseFreeCultureBuilding weighs: culture per cost, wonders out.
     Building_YieldChanges = queryable({
       [1] = { BuildingType = "BUILDING_MONUMENT", YieldType = "YIELD_CULTURE", Yield = 2 },
       [2] = { BuildingType = "BUILDING_PYRAMIDS", YieldType = "YIELD_CULTURE", Yield = 3 },
       [3] = { BuildingType = "BUILDING_LIBRARY", YieldType = "YIELD_SCIENCE", Yield = 3 },
+      [4] = { BuildingType = "BUILDING_OXFORD_UNIVERSITY", YieldType = "YIELD_CULTURE",
+              Yield = 3 },
     }),
     -- Carthage's trait, which names a building rather than its class. The
     -- grant resolves per civ, so every version of that class is a candidate.
@@ -320,16 +325,28 @@ local globals = {
       [2] = { Type = "TRAIT_NONE" },
     }),
     BuildingClasses = {
-      BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_NATIONAL_COLLEGE = { MaxGlobalInstances = -1, MaxPlayerInstances = 1 },
-      BUILDINGCLASS_GREAT_LIBRARY = { MaxGlobalInstances = 1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_LIBRARY = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_HARBOR = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_AQUEDUCT = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_GARDEN = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_MONUMENT = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
-      BUILDINGCLASS_SCRIPTORIUM = { MaxGlobalInstances = -1, MaxPlayerInstances = -1 },
+      BUILDINGCLASS_PYRAMIDS = { MaxGlobalInstances = 1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_GRANARY = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_NATIONAL_COLLEGE = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = 1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_GREAT_LIBRARY = { MaxGlobalInstances = 1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_LIBRARY = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_HARBOR = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_AQUEDUCT = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_GARDEN = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_MONUMENT = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_SCRIPTORIUM = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = -1 },
+      BUILDINGCLASS_OXFORD_UNIVERSITY = { MaxGlobalInstances = -1,
+        MaxPlayerInstances = -1, MaxTeamInstances = 1 },
     },
     Beliefs = { [10] = { Type = "BELIEF_TITHE" } },
     Eras = { [2] = { Type = "ERA_CLASSICAL" } },
@@ -502,6 +519,10 @@ t.test("wonderClass is national for national wonders", function()
   t.assert_equal("national", civ.wonderClass(8))
 end)
 
+t.test("wonderClass is team for team wonders", function()
+  t.assert_equal("team", civ.wonderClass(20))
+end)
+
 t.test("wonderClass is nil for ordinary buildings", function()
   t.assert_nil(civ.wonderClass(5))
 end)
@@ -538,6 +559,10 @@ t.test("grantableBuildings leaves out a wonder that happens to yield culture", f
   t.assert_nil(grantableClassSet()["BUILDINGCLASS_PYRAMIDS"])
 end)
 
+t.test("grantableBuildings leaves out a team wonder that yields culture", function()
+  t.assert_nil(grantableClassSet()["BUILDINGCLASS_OXFORD_UNIVERSITY"])
+end)
+
 t.test("grantableBuildings leaves out a chosen building the game does not define", function()
   t.assert_nil(grantableClassSet()["BUILDING_GALLERY"])
 end)
@@ -561,6 +586,7 @@ t.test("allBuildings lists every building the game defines, id and type", functi
     { id = 12, type = "BUILDING_LIBRARY" },
     { id = 18, type = "BUILDING_MONUMENT" },
     { id = 8, type = "BUILDING_NATIONAL_COLLEGE" },
+    { id = 20, type = "BUILDING_OXFORD_UNIVERSITY" },
     { id = 7, type = "BUILDING_PYRAMIDS" },
     { id = 13, type = "BUILDING_ROYAL_LIBRARY" },
     { id = 19, type = "BUILDING_SCRIPTORIUM" },

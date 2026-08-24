@@ -285,6 +285,15 @@ culture against cost across all of them. `NumCitiesFreeWalls` is left
 out deliberately: it hands over a *real* building (`CvPlayer.cpp:8631`),
 which no scan of free buildings can see, and no Lekmod policy uses it.
 
+"Non-wonder" has to answer all three caps. Civ 5 limits a wonder per
+world, per team or per player, and reading only the first and the last
+made Oxford University - Lekmod's one per-team building class - look
+ordinary: it yields culture, so it joined the candidates, while
+`ChooseFreeCultureBuilding` can never pick it
+(`LEKMOD_NO_FREE_TEAM_WONDERS`, `CvCity.cpp:11331`). The same reading
+fills the `wonder` field of `building_constructed`, where the cost was
+larger - every Oxford was logged as a plain building.
+
 The set is expanded by class rather than resolved per player. A column
 may name a class or one civ's version of it, and the grant resolves to
 the owner's version (`CvCity.cpp:7391`), so every version of a grantable

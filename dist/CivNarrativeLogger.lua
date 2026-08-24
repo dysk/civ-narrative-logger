@@ -114,9 +114,12 @@ function M.new(g)
     return value ~= nil and value ~= false and value ~= 0
   end
 
+  -- A wonder is whatever the ruleset caps, and it caps in three scopes,
+  -- not two: Oxford University is one per team.
   local function wonderScope(class)
     local limits = g.GameInfo.BuildingClasses[class]
     if limits.MaxGlobalInstances > 0 then return "world" end
+    if limits.MaxTeamInstances > 0 then return "team" end
     if limits.MaxPlayerInstances > 0 then return "national" end
   end
 
