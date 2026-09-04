@@ -262,3 +262,38 @@ Consumer fallback: the analyst carries `EarlyGame::GRANTED_BY`, which
 accepts Angkor Wat as evidence of the University it grants. That covers
 logs recorded before this change - `examples/babylon-domination.jsonl`
 among them - and stays until they are all replaced.
+
+## Record tourism per city now that Lekmod makes it a yield
+
+The snapshot has carried empire-wide `tourism` since the culture change
+above, but nothing said which city produced it, so a cultural push read
+as one number with no geography behind it. Until Lekmod v35.2 that was
+the only reading available: tourism lived in `CvPlayerCulture` and the
+per-city figure was reachable only through `GetCityCulture()` helpers
+that the DLL never bound to Lua.
+
+v35.2 defines `LEK_YIELD_TOURISM` and `STANDARDIZE_YIELDS`
+(`LEKMOD_DLL/CvGameCoreDLL_Expansion2/_Defines.h:1137,1294`) and adds
+`YIELD_TOURISM` to the `Yields` table as ID 7, appended after
+`YIELD_GOLDEN_AGE_POINTS` rather than inserted, so no existing yield was
+renumbered. A city now answers `GetYieldRateTimes100(YIELD_TOURISM)`
+through the same generic path as every other yield
+(`CvCity.cpp:12685`), including the tourism-only modifiers for the
+Congress and International Games (`CvCity.cpp:12467,12472`).
+
+So the change is one entry in `CITY_YIELDS` (`src/adapter.lua:314`):
+`yield_tourism`, alongside the six that were already there. The loop and
+the divide by 100 were already generic, which is also why a city that
+produces no tourism reports `0` rather than omitting the field - the
+analyst reads these as a per-turn series, and a missing field is a gap
+in it, not a zero.
+
+Empire-wide `tourism` in `playerStats` is unaffected and stays worth
+keeping: `GetTourism()` now delegates to
+`getYieldTimes100(YIELD_TOURISM) / 100`
+(`CvCultureClasses.cpp:3036-3041`), so its scale is unchanged, and it
+counts non-city sources that summing the cities would miss.
+
+Consumer fallback: none. Empire tourism says nothing about where it
+comes from, and the city that carries a cultural victory is exactly the
+one an analyst wants named.

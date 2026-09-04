@@ -369,6 +369,7 @@ function M.new(g)
     yield_science = "YIELD_SCIENCE",
     yield_culture = "YIELD_CULTURE",
     yield_faith = "YIELD_FAITH",
+    yield_tourism = "YIELD_TOURISM",
   }
 
   local function cityYields(city)

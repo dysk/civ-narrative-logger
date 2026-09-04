@@ -168,6 +168,7 @@ local globals = {
     YIELD_SCIENCE = "YIELD_SCIENCE",
     YIELD_CULTURE = "YIELD_CULTURE",
     YIELD_FAITH = "YIELD_FAITH",
+    YIELD_TOURISM = "YIELD_TOURISM",
   },
   PublicOpinionTypes = {
     NO_PUBLIC_OPINION = -1,
@@ -227,7 +228,8 @@ local globals = {
           isCapital = true, population = 12, foodStored = 34, foodTurnsLeft = 6,
           productionBuilding = 7, productionTurnsLeft = 9, productionStored = 140,
           yields = { YIELD_FOOD = 1450, YIELD_PRODUCTION = 980, YIELD_GOLD = 620,
-                     YIELD_SCIENCE = 1130, YIELD_CULTURE = 400, YIELD_FAITH = 210 },
+                     YIELD_SCIENCE = 1130, YIELD_CULTURE = 400, YIELD_FAITH = 210,
+                     YIELD_TOURISM = 830 },
           buildings = 14, defense = 3200, religion = 4, followers = 9,
           founded = 1, acquired = 1, freeBuildings = { [12] = 1 } },
         { id = 7, name = "Rome (captured)", x = 15, y = 22, originalOwner = 1, capital = true,
@@ -436,6 +438,7 @@ t.test("cityStats reads the full record for a city", function()
     yield_science = 11.3,
     yield_culture = 4,
     yield_faith = 2.1,
+    yield_tourism = 8.3,
     buildings = 14,
     damage = 0,
     defense = 3200,
@@ -449,6 +452,14 @@ t.test("cityStats reads the full record for a city", function()
     capital = true,
     original_owner = "Poland",
   }, civ.cityStats(0)[1])
+end)
+
+-- Tourism became an ordinary yield in Lekmod v35.2, so a city answers
+-- GetYieldRateTimes100 for it like any other. A city that draws none
+-- must still say so: the analyst reads these as a per-turn series, and
+-- a missing field is a gap in it, not a zero.
+t.test("cityStats records no tourism as zero, not as a missing field", function()
+  t.assert_equal(0, civ.cityStats(0)[2].yield_tourism)
 end)
 
 -- The three production getters answer -1 for the two kinds the city is
