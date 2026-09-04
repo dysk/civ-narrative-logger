@@ -292,6 +292,79 @@ function M.new(g)
     }
   end
 
+  -- Two APIs answer "where did this yield come from", and they disagree.
+  -- Science and faith never moved to the generic yield path, so their own
+  -- getters are what their totals are built from; culture and tourism did
+  -- move, and there the generic path is what the game runs. Reading a
+  -- yield through the wrong one returns a number the game never uses.
+  local SCIENCE_SOURCES = {
+    { "cities", "GetScienceFromCitiesTimes100" },
+    { "city_states", "GetScienceFromOtherPlayersTimes100" },
+    { "happiness", "GetScienceFromHappinessTimes100" },
+    { "gold", "GetScienceFromGoldTimes100" },
+    { "research_agreements", "GetScienceFromResearchAgreementsTimes100" },
+    { "deficit", "GetScienceFromBudgetDeficitTimes100" },
+  }
+
+  -- Faith alone answers in whole points; everything else is Times100.
+  local FAITH_SOURCES = {
+    { "cities", "GetFaithPerTurnFromCities" },
+    { "minor_civs", "GetFaithPerTurnFromMinorCivs" },
+    { "religion", "GetFaithPerTurnFromReligion" },
+  }
+
+  -- Split around religion because the DLL sums in this order and hands
+  -- religion the running subtotal: its belief modifier applies to the
+  -- four before it as well as to itself. The two after it are added once
+  -- the golden-age modifier has been applied, so they stand outside it.
+  local SOURCES_BEFORE_RELIGION = {
+    { "cities", "GetYieldFromCitiesTimes100" },
+    { "other_players", "GetYieldFromOtherPlayersTimes100" },
+    { "happiness", "GetYieldFromHappinessTimes100" },
+    { "traits", "GetYieldFromTraitsTimes100" },
+  }
+
+  local SOURCES_AFTER_RELIGION = {
+    { "penalties", "GetYieldPenaltiesTimes100" },
+    { "minor_civs", "GetYieldFromMinorCivsTimes100" },
+  }
+
+  -- A source that gives nothing is not news: most of them only ever
+  -- apply to one yield, and writing the rest as zeroes would say nothing
+  -- at several times the size.
+  local function addSource(sources, field, value, scale)
+    if value ~= 0 then sources[field] = value / scale end
+  end
+
+  -- Answers the named sources, and beside them their unscaled sum, which
+  -- is what the generic path owes religion.
+  local function readSources(p, definitions, scale, ...)
+    local sources, subtotal = {}, 0
+    for _, source in ipairs(definitions) do
+      local value = p[source[2]](p, ...)
+      subtotal = subtotal + value
+      addSource(sources, source[1], value, scale)
+    end
+    return sources, subtotal
+  end
+
+  local function genericSources(p, yieldType)
+    local yield = g.YieldTypes[yieldType]
+    local sources, subtotal = readSources(p, SOURCES_BEFORE_RELIGION, 100, yield)
+    addSource(sources, "religion",
+      p.GetYieldFromReligionTimes100(p, yield, subtotal), 100)
+    return addAll(sources, readSources(p, SOURCES_AFTER_RELIGION, 100, yield))
+  end
+
+  local function yieldSources(p)
+    return {
+      science = readSources(p, SCIENCE_SOURCES, 100),
+      faith = readSources(p, FAITH_SOURCES, 1),
+      culture = genericSources(p, "YIELD_CULTURE"),
+      tourism = genericSources(p, "YIELD_TOURISM"),
+    }
+  end
+
   function civ.playerStats(playerId)
     local p = g.Players[playerId]
     if not isLivingMajor(p) then
@@ -302,6 +375,7 @@ function M.new(g)
     addAll(stats, researchOf(p))
     addAll(stats, ideologyOf(p))
     stats.resources = resourcesOf(p)
+    stats.yield_sources = yieldSources(p)
     return stats
   end
 

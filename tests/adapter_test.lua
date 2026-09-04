@@ -57,6 +57,11 @@ local function fakeCity(c)
   }
 end
 
+-- The generic yield path hands religion the running subtotal so its
+-- belief modifier can apply to everything ahead of it. Recorded here
+-- because that argument, not the answer, is the contract with the DLL.
+local religionAsked = {}
+
 local function fakePlayer(spec)
   return {
     IsAlive = function() return spec.alive ~= false end,
@@ -84,6 +89,33 @@ local function fakePlayer(spec)
       end
     end,
     GetTourism = function() return spec.tourism end,
+
+    -- Science and faith keep their own pre-v35.2 breakdowns, which are
+    -- the ones their totals are actually built from.
+    GetScienceFromCitiesTimes100 = function() return (spec.scienceSources or {}).cities or 0 end,
+    GetScienceFromOtherPlayersTimes100 = function() return (spec.scienceSources or {}).cityStates or 0 end,
+    GetScienceFromHappinessTimes100 = function() return (spec.scienceSources or {}).happiness or 0 end,
+    GetScienceFromGoldTimes100 = function() return (spec.scienceSources or {}).gold or 0 end,
+    GetScienceFromResearchAgreementsTimes100 = function() return (spec.scienceSources or {}).researchAgreements or 0 end,
+    GetScienceFromBudgetDeficitTimes100 = function() return (spec.scienceSources or {}).deficit or 0 end,
+    GetFaithPerTurnFromCities = function() return (spec.faithSources or {}).cities or 0 end,
+    GetFaithPerTurnFromMinorCivs = function() return (spec.faithSources or {}).minorCivs or 0 end,
+    GetFaithPerTurnFromReligion = function() return (spec.faithSources or {}).religion or 0 end,
+
+    -- Culture and tourism are the two yields the generic path really
+    -- computes, so they are the two it may be asked about.
+    GetYieldFromCitiesTimes100 = function(_, yield) return (spec.yieldFromCities or {})[yield] or 0 end,
+    GetYieldFromOtherPlayersTimes100 = function(_, yield) return (spec.yieldFromOtherPlayers or {})[yield] or 0 end,
+    GetYieldFromHappinessTimes100 = function(_, yield) return (spec.yieldFromHappiness or {})[yield] or 0 end,
+    GetYieldFromTraitsTimes100 = function(_, yield) return (spec.yieldFromTraits or {})[yield] or 0 end,
+    GetYieldPenaltiesTimes100 = function(_, yield) return (spec.yieldPenalties or {})[yield] or 0 end,
+    GetYieldFromMinorCivsTimes100 = function(_, yield) return (spec.yieldFromMinorCivs or {})[yield] or 0 end,
+    GetYieldFromReligionTimes100 = function(_, yield, prevTotal)
+      religionAsked[yield] = prevTotal
+      local source = (spec.yieldFromReligion or {})[yield]
+      if source and source.prevTotal == prevTotal then return source.value end
+      return 0
+    end,
     GetNumCivsInfluentialOn = function() return spec.civsInfluentialOn end,
     GetInfluenceOn = function(_, otherId)
       return spec.influenceOn and spec.influenceOn[otherId]
@@ -219,6 +251,17 @@ local globals = {
       culture = 30, faith = 10, happiness = 7, cities = 5,
       population = 41, might = 5600, militaryUnits = 14,
       tourism = 45, civsInfluentialOn = 1,
+      -- Each breakdown adds up to the total above it: science to 4800,
+      -- culture to 3000, faith to 10, tourism to 4500.
+      scienceSources = { cities = 4450, cityStates = 200, happiness = 150, gold = 50,
+                         researchAgreements = 100, deficit = -150 },
+      faithSources = { cities = 7, minorCivs = 2, religion = 1 },
+      yieldFromCities = { YIELD_CULTURE = 2400, YIELD_TOURISM = 3800 },
+      yieldFromHappiness = { YIELD_CULTURE = 200 },
+      yieldFromTraits = { YIELD_TOURISM = 200 },
+      yieldFromMinorCivs = { YIELD_CULTURE = 100 },
+      yieldFromReligion = { YIELD_CULTURE = { prevTotal = 2600, value = 300 },
+                            YIELD_TOURISM = { prevTotal = 4000, value = 500 } },
       influenceOn = { [1] = 320 },
       influenceLevel = { [1] = 4 },
       influenceTrend = { [1] = 1 },
@@ -691,6 +734,13 @@ t.test("playerStats reads the full stat line of a living major civ", function()
     techs = 24,
     tourism = 45,
     civs_influential_on = 1,
+    yield_sources = {
+      science = { cities = 44.5, city_states = 2, happiness = 1.5, gold = 0.5,
+                  research_agreements = 1, deficit = -1.5 },
+      culture = { cities = 24, happiness = 2, religion = 3, minor_civs = 1 },
+      faith = { cities = 7, minor_civs = 2, religion = 1 },
+      tourism = { cities = 38, traits = 2, religion = 5 },
+    },
     influence = {
       { civ = "Rome", points = 320, level = "INFLUENCE_LEVEL_INFLUENTIAL",
         trend = "INFLUENCE_TREND_RISING" },
@@ -752,6 +802,24 @@ t.test("playerStats influence list excludes self, dead, minors and barbarians", 
   local stats = civ.playerStats(0)
   t.assert_equal(1, #stats.influence)
   t.assert_equal("Rome", stats.influence[1].civ)
+end)
+
+-- A source that gives nothing is not news, and every yield has several
+-- that only ever apply to one other yield: research agreements are
+-- science alone, minor civs never touch tourism. Writing them as zeroes
+-- would triple the size of the record to say nothing.
+t.test("playerStats omits a yield source that contributes nothing", function()
+  t.assert_nil(civ.playerStats(0).yield_sources.culture.traits)
+end)
+
+-- Religion is not a flat source on the generic path: its belief modifier
+-- applies to itself plus everything counted ahead of it, so the DLL takes
+-- that subtotal as an argument. Passing anything else - nil, zero, the
+-- city figure alone - quietly understates every faith-led empire.
+t.test("playerStats asks religion for its share against the subtotal before it", function()
+  for key in pairs(religionAsked) do religionAsked[key] = nil end
+  civ.playerStats(0)
+  t.assert_deep_equal({ YIELD_CULTURE = 2600, YIELD_TOURISM = 4000 }, religionAsked)
 end)
 
 t.test("playerStats is nil for city-states", function()

@@ -297,3 +297,77 @@ counts non-city sources that summing the cities would miss.
 Consumer fallback: none. Empire tourism says nothing about where it
 comes from, and the city that carries a cultural victory is exactly the
 one an analyst wants named.
+
+## Break each yield down into where it came from
+
+The snapshot has carried one number per yield - `science`, `culture`,
+`faith`, `tourism` - and nothing about their composition, so two civs on
+48 science looked identical whether the science came from twenty cities
+or from three cities and a religion. `yield_sources` names the parts:
+
+```json
+"yield_sources":{
+  "science":{"cities":44.5,"city_states":2,"happiness":1.5,"gold":0.5,
+             "research_agreements":1,"deficit":-1.5},
+  "culture":{"cities":24,"happiness":2,"religion":3,"minor_civs":1},
+  "faith":{"cities":7,"minor_civs":2,"religion":1},
+  "tourism":{"cities":38,"traits":2,"religion":5}
+}
+```
+
+### Two APIs answer this, and they disagree
+
+v35.2 added a generic breakdown - `GetYieldFrom{Cities,OtherPlayers,
+Happiness,Traits,Religion,MinorCivs}Times100` and
+`GetYieldPenaltiesTimes100` - decomposing `CvPlayer::getYieldTimes100`
+(`CvPlayer.cpp:22096`). It is tempting to read every yield through it.
+That would be wrong for most of them: the game only runs that path for
+culture (`CvPlayer.cpp:12450`, the `#else` under `STANDARDIZE_YIELDS`)
+and tourism (`CvCultureClasses.cpp:3038`). Science and faith keep their
+own older totals - `GetScienceTimes100` (`:22310`) and
+`GetTotalFaithPerTurn` (`:14406`) - which `STANDARDIZE_YIELDS` does not
+touch, so the generic getters compute a parallel figure for them that
+nothing in the game uses.
+
+Worse, the same words mean different things across the two. In the old
+science path `OtherPlayers` is Scholasticism from city-states; in the
+generic one it is research agreements, and city-states live under
+`MinorCivs` instead. The generic `getYieldFromMinorCivsTimes100` also
+falls through from `YIELD_SCIENCE` into `YIELD_CULTURE` for want of a
+`break` (`CvPlayer.cpp:22219-22222`).
+
+So science and faith are read through their own getters, which have been
+exposed to Lua since v35 and were simply never used here; culture and
+tourism through the generic ones. Gold is absent: it is not computed as
+a yield at all but through `CvTreasury`, and would need its own reading.
+Production and food have no empire-level sources beyond their cities.
+
+### Religion takes an argument
+
+`GetYieldFromReligionTimes100(yield, prevTotal)` is not a flat source.
+Its founder-belief modifier applies to everything counted ahead of it as
+well as to itself (`CvPlayer.cpp:22283-22290`), so the DLL hands it the
+running subtotal, and the adapter sums the four sources before it to do
+the same. Passing zero instead fails silently and understates every
+religion-led empire, which is why a test pins the argument rather than
+the answer.
+
+### Reading the record
+
+Sources that contribute nothing are omitted - most only ever apply to
+one yield, and spelling out the rest as zeroes would multiply the size
+of the record to say nothing.
+
+The parts add up to the total the snapshot already carries, with three
+exceptions worth knowing, all of them informative rather than defects.
+Under a golden age the modifier applies only to the sources ahead of
+`penalties` and `minor_civs` (`CvPlayer.cpp:22115-22125`), so the total
+exceeds their sum; `golden_age_turns` in the same record says when.
+During anarchy every total returns 0 while the sources do not;
+`anarchy_turns` says when. And science clamps at zero (`max(iValue, 0)`)
+while `deficit` keeps running negative, which is how deep a bankruptcy
+runs rather than how much science was lost.
+
+Consumer fallback: none. A single figure per yield cannot distinguish a
+wide empire from a tall one running on beliefs, which is most of what
+separates two strategies on the same score.
