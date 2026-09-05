@@ -13,6 +13,7 @@ local FILES = {
   "src.congress",
   "src.victory",
   "src.diplomacy",
+  "src.city_states",
   "src.main",
 }
 

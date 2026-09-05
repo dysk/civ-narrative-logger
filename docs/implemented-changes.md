@@ -447,3 +447,70 @@ supplies.
 
 No `player_eliminated` is emitted for a minor: `src/roster.lua` polls
 living majors, and the capture record already carries the death.
+
+## Say how each city-state is held, not only when it changes hands
+
+`src/city_states.lua` polls where every major stands with every
+city-state. Landed after the roster above, which named them.
+
+```json
+{"ally":"Poland","city_state":"Geneva","event":"city_state_snapshot",
+ "relations":[{"civ":"Poland","influence":112,"level":"ally",
+               "per_turn":-1.5,"protected":true},
+              {"civ":"Rome","influence":18}],"turn":142}
+```
+
+### What the hooks already said, and what they did not
+
+`SetAlly`, `MinorAlliesChanged` and `MinorFriendsChanged` fire on
+threshold crossings and already carry the friendship either side of the
+crossing, so the poller does not re-announce them - that would be two
+records for one event. What no hook says is the state between
+crossings: an alliance held at 112 and sliding reads exactly like one
+held at 61 and about to go, and today the log cannot tell them apart.
+
+Level 2 is `IsAllies(ePlayer)` and a city-state has one ally
+(`CvMinorCivAI.cpp:6740`), so every change of ally is already a change
+of level on both sides and needs no separate trigger.
+
+### Written on a crossing, not every turn
+
+Influence moves every turn on its own. At sixteen city-states over a
+long game a per-turn record would roughly double the log to say that
+decay is decay, so after the opening baseline a city-state is written
+again only when somebody's level with it changed - about a hundred
+records in a recorded game rather than several thousand.
+
+That is not lossy, because `per_turn` travels in every record: the
+curve between two snapshots follows from the rate, so the gap is read
+back rather than guessed.
+
+The session opens with a baseline over every city-state - sixteen
+records - for two reasons. A log resumed mid-game is otherwise blind
+until somebody happens to cross a threshold, and a city-state nobody
+ever courts would otherwise never appear at all, though somebody
+standing at 55 influence and giving up is exactly the kind of decision
+worth reading.
+
+### Pledges are the exception
+
+A pledge to protect fires no hook of any kind. It is also a discrete
+political act rather than a number, so it is written whenever it
+changes - `city_state_protected` and `city_state_protection_ended` -
+rather than waiting for somebody else to cross a threshold. It is read
+from the major, not from the city-state (`CvLuaPlayer.cpp:8319`).
+
+### Reading the record
+
+The omit rule from the yield sources applies throughout: nothing that
+is nothing is written. A major with no standing at all is left out of
+`relations` entirely - before contact every pair reads as zero, and
+most pairs never leave that state - and `level` is absent for neutral,
+`per_turn` for zero, `protected` for false. `ally` is absent when
+nobody holds it, because `GetAlly` answers NO_PLAYER, which is -1 and
+not a civ.
+
+Still out: the quests. `MinorCivQuestTypes` is a C++ enum
+(`CvMinorCivAI.h:50-71`), not a database table, so iterating it means
+hardcoding a range and re-checking it against every Lekmod release -
+the only part of this with a real maintenance cost.

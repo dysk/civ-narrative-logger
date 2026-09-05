@@ -145,6 +145,10 @@ function M.new(g)
     return p and p:IsAlive() and not p:IsMinorCiv() and not p:IsBarbarian()
   end
 
+  local function isLivingMinor(p)
+    return p and p:IsAlive() and p:IsMinorCiv() and not p:IsBarbarian()
+  end
+
   local function influenceList(p, selfId)
     local list = {}
     for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
@@ -742,12 +746,67 @@ function M.new(g)
   function civ.cityStateRoster()
     local roster = {}
     for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
-      local p = g.Players[i]
-      if p and p:IsAlive() and p:IsMinorCiv() and not p:IsBarbarian() then
-        table.insert(roster, cityStateEntry(p))
+      if isLivingMinor(g.Players[i]) then
+        table.insert(roster, cityStateEntry(g.Players[i]))
       end
     end
     return roster
+  end
+
+  local FRIENDSHIP_LEVELS = { [1] = "friend", [2] = "ally" }
+
+  -- Where one major stands with one city-state. The three city_state_*
+  -- hooks fire only when a threshold is crossed, so this is the only
+  -- thing that says whether an alliance is held at 112 and sliding or at
+  -- 61 and about to go. per_turn is what makes a sparse record enough:
+  -- the curve between two snapshots is read back from the rate.
+  --
+  -- Protection is asked of the major, not of the city-state
+  -- (CvLuaPlayer.cpp:8319). Nothing here is written when it is nothing -
+  -- before contact every pair reads as zero, and most pairs never leave
+  -- that state.
+  local function cityStateRelation(minor, minorId, major, majorId)
+    local influence = minor:GetMinorCivFriendshipWithMajor(majorId)
+    local perTurn = minor:GetFriendshipChangePerTurnTimes100(majorId)
+    local level = FRIENDSHIP_LEVELS[minor:GetMinorCivFriendshipLevelWithMajor(majorId)]
+    local protected = major:IsProtectingMinor(minorId)
+    if influence == 0 and perTurn == 0 and not level and not protected then
+      return nil
+    end
+    return {
+      civ = major:GetCivilizationShortDescription(),
+      influence = influence ~= 0 and influence or nil,
+      per_turn = perTurn ~= 0 and perTurn / 100 or nil,
+      level = level,
+      protected = protected or nil,
+    }
+  end
+
+  local function cityStateRelations(minor, minorId)
+    local relations = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[i]) then
+        relations[i] = cityStateRelation(minor, minorId, g.Players[i], i)
+      end
+    end
+    return relations
+  end
+
+  -- GetAlly answers NO_PLAYER when nobody holds it, which is -1.
+  function civ.cityStateSnapshot()
+    local snapshot = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMinor(p) then
+        local ally = p:GetAlly()
+        snapshot[i] = {
+          civ = p:GetCivilizationShortDescription(),
+          ally = ally >= 0 and civ.civName(ally) or nil,
+          relations = cityStateRelations(p, i),
+        }
+      end
+    end
+    return snapshot
   end
 
   -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the

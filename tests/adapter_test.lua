@@ -1164,11 +1164,22 @@ local function cityStatePlayer(spec)
         GetY = function() return spec.at[2] end,
       }
     end,
+    GetAlly = function() return spec.ally or -1 end,
+    GetMinorCivFriendshipWithMajor = function(_, major)
+      return (spec.influence or {})[major] or 0
+    end,
+    GetFriendshipChangePerTurnTimes100 = function(_, major)
+      return (spec.perTurn100 or {})[major] or 0
+    end,
+    GetMinorCivFriendshipLevelWithMajor = function(_, major)
+      return (spec.level or {})[major] or 0
+    end,
+    IsProtectingMinor = function(_, minor) return (spec.protecting or {})[minor] == true end,
   }
 end
 
 local cityStateGlobals = {
-  GameDefines = { MAX_CIV_PLAYERS = 6 },
+  GameDefines = { MAX_CIV_PLAYERS = 7 },
   GameInfo = {
     MinorCivTraits = {
       [0] = { Type = "MINOR_TRAIT_CULTURED" },
@@ -1178,15 +1189,19 @@ local cityStateGlobals = {
     Units = { [42] = { Type = "UNIT_HOPLITE" } },
   },
   Players = {
-    [0] = cityStatePlayer({ civ = "Poland" }),
+    [0] = cityStatePlayer({ civ = "Poland", protecting = { [2] = true } }),
     [1] = cityStatePlayer({ civ = "Barbarians", barbarian = true }),
     [2] = cityStatePlayer({ civ = "Geneva", minor = true, trait = 0, at = { 30, 8 },
-                            personality = "MINOR_CIV_PERSONALITY_PACIFISTIC" }),
+                            personality = "MINOR_CIV_PERSONALITY_PACIFISTIC",
+                            ally = 0, influence = { [0] = 112, [6] = 18 },
+                            perTurn100 = { [0] = -150 }, level = { [0] = 2 } }),
     [3] = cityStatePlayer({ civ = "Sparta", minor = true, trait = 1, at = { 12, 44 },
                             personality = "MINOR_CIV_PERSONALITY_HOSTILE",
-                            uniqueUnit = 42 }),
+                            uniqueUnit = 42,
+                            influence = { [6] = 45 }, level = { [6] = 1 } }),
     [4] = cityStatePlayer({ civ = "Venice", minor = true, trait = 2 }),
     [5] = cityStatePlayer({ civ = "Ragusa", minor = true, trait = 2, alive = false }),
+    [6] = cityStatePlayer({ civ = "Rome" }),
   },
 }
 local cityStateCiv = adapter.new(cityStateGlobals)
@@ -1215,4 +1230,39 @@ t.test("cityStateRoster leaves out majors, barbarians and the already conquered"
     table.insert(names, entry.civ)
   end
   t.assert_deep_equal({ "Geneva", "Sparta", "Venice" }, names)
+end)
+
+-- What the roster cannot say: how each major stands with each city-state
+-- right now. The three city_state_* hooks fire only when a threshold is
+-- crossed, so between them the log never says whether an ally is held at
+-- 112 and sliding or at 61 and about to go.
+t.test("cityStateSnapshot reports each city-state's standing with every major", function()
+  t.assert_deep_equal({
+    [2] = {
+      civ = "Geneva",
+      ally = "Poland",
+      relations = {
+        [0] = { civ = "Poland", influence = 112, per_turn = -1.5,
+                level = "ally", protected = true },
+        [6] = { civ = "Rome", influence = 18 },
+      },
+    },
+    [3] = {
+      civ = "Sparta",
+      relations = { [6] = { civ = "Rome", influence = 45, level = "friend" } },
+    },
+    [4] = { civ = "Venice", relations = {} },
+  }, cityStateCiv.cityStateSnapshot())
+end)
+
+-- Same rule as the yield sources: a relationship that is nothing at all
+-- is not written. Before contact every pair reads as zero, and spelling
+-- those out would be most of the record for most of the game.
+t.test("cityStateSnapshot leaves out a major it has no standing with", function()
+  t.assert_nil(cityStateCiv.cityStateSnapshot()[3].relations[0])
+end)
+
+-- GetAlly answers NO_PLAYER, which is -1 and not a civ.
+t.test("cityStateSnapshot says nobody holds a city-state rather than naming -1", function()
+  t.assert_nil(cityStateCiv.cityStateSnapshot()[3].ally)
 end)
