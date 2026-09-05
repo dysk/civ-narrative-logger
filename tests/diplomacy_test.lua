@@ -146,6 +146,41 @@ t.test("emits trade_agreement_signed once for the pair", function()
   }))
 end)
 
+t.test("emits embassy_ended when the embassy is withdrawn", function()
+  local before = calm({ 0, 1 })
+  before[0][1].embassy = true
+  t.assert_deep_equal({
+    '{"civ":"Poland","event":"embassy_ended","other_civ":"Rome","turn":11}',
+  }, pollThrough({
+    { turn = 10, snapshot = before },
+    { turn = 11, snapshot = calm({ 0, 1 }) },
+  }))
+end)
+
+t.test("emits defensive_pact_ended when the pact lapses", function()
+  local before = calm({ 0, 1 })
+  before[0][1].defensive_pact = true
+  before[1][0].defensive_pact = true
+  t.assert_deep_equal({
+    '{"civs":["Poland","Rome"],"event":"defensive_pact_ended","turn":11}',
+  }, pollThrough({
+    { turn = 10, snapshot = before },
+    { turn = 11, snapshot = calm({ 0, 1 }) },
+  }))
+end)
+
+t.test("emits trade_agreement_ended when the agreement lapses", function()
+  local before = calm({ 0, 1 })
+  before[0][1].trade_agreement = true
+  before[1][0].trade_agreement = true
+  t.assert_deep_equal({
+    '{"civs":["Poland","Rome"],"event":"trade_agreement_ended","turn":11}',
+  }, pollThrough({
+    { turn = 10, snapshot = before },
+    { turn = 11, snapshot = calm({ 0, 1 }) },
+  }))
+end)
+
 -- PlayerDoTurn fires once per living player, but the pairwise state is
 -- game-global, so the poll is gated on the turn like the congress poll.
 t.test("polls once per turn, however many players take theirs", function()
