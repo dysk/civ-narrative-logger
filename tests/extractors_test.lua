@@ -384,10 +384,16 @@ civ.playerRoster = function()
     { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
   }
 end
+civ.cityStateRoster = function()
+  return {
+    { civ = "Geneva", trait = "MINOR_TRAIT_CULTURED",
+      personality = "MINOR_CIV_PERSONALITY_PACIFISTIC" },
+  }
+end
 
 -- Not a GameEvents hook: emitted once whenever the logger attaches
 -- (game start, reload, pitboss restart).
-t.test("sessionStarted merges settings, roster and turn", function()
+t.test("sessionStarted merges settings, both rosters and turn", function()
   t.assert_deep_equal({
     event = "session_started",
     turn = 142,
@@ -396,6 +402,10 @@ t.test("sessionStarted merges settings, roster and turn", function()
     players = {
       { civ = "Poland", name = "dysk", human = true, handicap = "HANDICAP_KING" },
       { civ = "Rome", name = "Augustus", human = false, handicap = "HANDICAP_KING" },
+    },
+    city_states = {
+      { civ = "Geneva", trait = "MINOR_TRAIT_CULTURED",
+        personality = "MINOR_CIV_PERSONALITY_PACIFISTIC" },
     },
   }, extractors.sessionStarted(civ))
 end)

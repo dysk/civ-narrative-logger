@@ -371,3 +371,79 @@ runs rather than how much science was lost.
 Consumer fallback: none. A single figure per yield cannot distinguish a
 wide empire from a tall one running on beliefs, which is most of what
 separates two strategies on the same score.
+
+## Name what each city-state is before anyone allies with it
+
+`session_started` carries a second roster beside `players`:
+
+```json
+"city_states":[
+  {"civ":"Geneva","trait":"MINOR_TRAIT_CULTURED","x":30,"y":8,
+   "personality":"MINOR_CIV_PERSONALITY_PACIFISTIC"},
+  {"civ":"Sparta","trait":"MINOR_TRAIT_MILITARISTIC","x":12,"y":44,
+   "personality":"MINOR_CIV_PERSONALITY_HOSTILE","unique_unit":"UNIT_HOPLITE"}
+]
+```
+
+The log already names city-states 131 times in a single recorded game -
+`city_state_friendship_changed`, `city_state_ally_changed`,
+`city_state_alliance_changed` - and never said what any of them was.
+`civ` is `GetCivilizationShortDescription`, the same string those three
+events carry, so the roster joins to them directly.
+
+### Personality is Lekmod's, and only the save has it
+
+`Minor_Civ_Personalities` (`LEKMOD/Override/CIV5Units.xml:57`) is a
+Lekmod table of ten personalities - FRIENDLY, NEUTRAL, HOSTILE,
+IRRATIONAL (disabled), WEALTHY, IMPOVERISHED, PIRATE_REPUBLIC,
+THEOCRATIC, PACIFISTIC, ISOLATIONIST - and it decides behaviour, not
+flavour. HOSTILE sheds 150 influence a turn unprompted and accepts only
+bully quests; FRIENDLY decays at 75% and pays 125% on quests; WEALTHY
+adds a third to trade-route gold while making gold gifts buy a quarter
+less influence. Other columns block tribute, quests, gifts and allied
+war support outright.
+
+`CvMinorCivAI::DoPickPersonality` draws it at random once per game
+(`CvMinorCivAI.cpp:1991-2023`) and stores it in the save alone. Nothing
+in the mod files reconstructs it afterwards, which is the whole argument
+for recording it.
+
+`GetMinorCivPersonalityType` answers with the type string rather than an
+index (`CvLuaPlayer.cpp:6596`), and with the empty string on a build
+without the table - read as absence, so a vanilla-personality game
+simply has no such field.
+
+Known limitation: ISOLATIONIST carries `TransformsAtEra = ERA_MODERN`,
+so a personality is not fixed for the whole game. A roster written once
+per session picks the change up at the next reload and not before. The
+poller below is where a same-session change would be caught.
+
+### The plot travels with the identity
+
+City-states are placed at map generation, so no `city_founded` ever
+fires for them and the log otherwise never says where they are - which
+decides who can reach one at all. `GetCapitalCity` can answer nil; the
+entry then carries no plot rather than a made-up one.
+
+### What this deliberately leaves to a poller
+
+The roster is what a city-state *is*. What it is *to each major* -
+ally, influence and its trend, friendship level, pledges to protect,
+and the active quests with their targets and remaining turns - changes
+every turn and belongs to a per-turn poller, still to be written.
+
+### Killing and liberating one need no new hook
+
+`CityCaptureComplete` fires from `CvPlayer::acquireCity` for every
+acquisition, not just conquest, pushing `bConquest` as an argument
+(`CvPlayer.cpp:3586-3600`); liberation reaches it through
+`DoLiberatePlayer` -> `acquireCity(pCity, false, true)`
+(`CvPlayer.cpp:3998`). So both already land as `city_captured`: a
+city-state dying is one with `old_owner` set to it and
+`conquest: true`, a liberation one with `new_owner` set to it and
+`conquest: false`. What was missing was never the event - it was
+knowing that the name belonged to a city-state, which this roster
+supplies.
+
+No `player_eliminated` is emitted for a minor: `src/roster.lua` polls
+living majors, and the capture record already carries the death.

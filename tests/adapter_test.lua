@@ -1144,3 +1144,75 @@ t.test("diplomacySnapshot reads open borders as granted by the reading side", fu
     defensive_pact = true, trade_agreement = false },
     diplomacyCiv.diplomacySnapshot()[0][1])
 end)
+
+-- Everything a city-state is before anyone touches it. Kept apart from
+-- the main fake because minors live above MAX_CIV_PLAYERS there.
+local function cityStatePlayer(spec)
+  return {
+    IsAlive = function() return spec.alive ~= false end,
+    IsMinorCiv = function() return spec.minor == true end,
+    IsBarbarian = function() return spec.barbarian == true end,
+    GetCivilizationShortDescription = function() return spec.civ end,
+    GetMinorCivTrait = function() return spec.trait end,
+    GetMinorCivPersonalityType = function() return spec.personality or "" end,
+    IsMinorCivHasUniqueUnit = function() return spec.uniqueUnit ~= nil end,
+    GetMinorCivUniqueUnit = function() return spec.uniqueUnit end,
+    GetCapitalCity = function()
+      if not spec.at then return nil end
+      return {
+        GetX = function() return spec.at[1] end,
+        GetY = function() return spec.at[2] end,
+      }
+    end,
+  }
+end
+
+local cityStateGlobals = {
+  GameDefines = { MAX_CIV_PLAYERS = 6 },
+  GameInfo = {
+    MinorCivTraits = {
+      [0] = { Type = "MINOR_TRAIT_CULTURED" },
+      [1] = { Type = "MINOR_TRAIT_MILITARISTIC" },
+      [2] = { Type = "MINOR_TRAIT_MARITIME" },
+    },
+    Units = { [42] = { Type = "UNIT_HOPLITE" } },
+  },
+  Players = {
+    [0] = cityStatePlayer({ civ = "Poland" }),
+    [1] = cityStatePlayer({ civ = "Barbarians", barbarian = true }),
+    [2] = cityStatePlayer({ civ = "Geneva", minor = true, trait = 0, at = { 30, 8 },
+                            personality = "MINOR_CIV_PERSONALITY_PACIFISTIC" }),
+    [3] = cityStatePlayer({ civ = "Sparta", minor = true, trait = 1, at = { 12, 44 },
+                            personality = "MINOR_CIV_PERSONALITY_HOSTILE",
+                            uniqueUnit = 42 }),
+    [4] = cityStatePlayer({ civ = "Venice", minor = true, trait = 2 }),
+    [5] = cityStatePlayer({ civ = "Ragusa", minor = true, trait = 2, alive = false }),
+  },
+}
+local cityStateCiv = adapter.new(cityStateGlobals)
+
+-- The trait is what an alliance pays out in; the personality is Lekmod's
+-- own layer on top, drawn at random once per game and therefore not
+-- recoverable from the mod files afterwards. Where it sits decides who
+-- can reach it at all, which is half of why anyone allies with one.
+-- Venice shows the absences: a build with no personalities answers with
+-- an empty string, only militaristic city-states gift a unit, and a
+-- roster entry carries no plot rather than a made-up one when the game
+-- hands back no capital.
+t.test("cityStateRoster says what allying with each city-state is worth", function()
+  t.assert_deep_equal({
+    { civ = "Geneva", trait = "MINOR_TRAIT_CULTURED", x = 30, y = 8,
+      personality = "MINOR_CIV_PERSONALITY_PACIFISTIC" },
+    { civ = "Sparta", trait = "MINOR_TRAIT_MILITARISTIC", x = 12, y = 44,
+      personality = "MINOR_CIV_PERSONALITY_HOSTILE", unique_unit = "UNIT_HOPLITE" },
+    { civ = "Venice", trait = "MINOR_TRAIT_MARITIME" },
+  }, cityStateCiv.cityStateRoster())
+end)
+
+t.test("cityStateRoster leaves out majors, barbarians and the already conquered", function()
+  local names = {}
+  for _, entry in ipairs(cityStateCiv.cityStateRoster()) do
+    table.insert(names, entry.civ)
+  end
+  t.assert_deep_equal({ "Geneva", "Sparta", "Venice" }, names)
+end)

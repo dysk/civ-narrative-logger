@@ -712,6 +712,44 @@ function M.new(g)
     return roster
   end
 
+  -- The trait is what an alliance pays out in. The personality is
+  -- Lekmod's own layer over it (Minor_Civ_Personalities): it decides how
+  -- fast influence decays, what a gift buys and whether the city-state
+  -- takes tribute or quests at all. It is drawn at random once per game
+  -- and kept only in the save, so nothing recovers it afterwards.
+  --
+  -- Where it sits decides who can reach it, and the map is not in the
+  -- log anywhere else, so the plot travels with the identity.
+  --
+  -- Trait and personality are read as names rather than numbers: the
+  -- empty string is how a build without personalities answers, and only
+  -- militaristic city-states have a unit to gift. GetCapitalCity can
+  -- answer nil; the entry then carries no plot rather than a made-up one.
+  local function cityStateEntry(p)
+    local personality = p:GetMinorCivPersonalityType()
+    local capital = p:GetCapitalCity()
+    return {
+      civ = p:GetCivilizationShortDescription(),
+      trait = typeOf(g.GameInfo.MinorCivTraits[p:GetMinorCivTrait()]),
+      personality = personality ~= "" and personality or nil,
+      unique_unit = p:IsMinorCivHasUniqueUnit()
+        and civ.unitTypeName(p:GetMinorCivUniqueUnit()) or nil,
+      x = capital and capital:GetX() or nil,
+      y = capital and capital:GetY() or nil,
+    }
+  end
+
+  function civ.cityStateRoster()
+    local roster = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if p and p:IsAlive() and p:IsMinorCiv() and not p:IsBarbarian() then
+        table.insert(roster, cityStateEntry(p))
+      end
+    end
+    return roster
+  end
+
   -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
   -- game sets them together (CvGame::setWinner), so the team alone
   -- answers "is it over".

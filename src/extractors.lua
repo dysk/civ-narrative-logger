@@ -525,6 +525,7 @@ function M.sessionStarted(civ)
   record.event = "session_started"
   record.turn = civ.turn()
   record.players = civ.playerRoster()
+  record.city_states = civ.cityStateRoster()
   return record
 end
 

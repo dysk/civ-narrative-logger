@@ -200,7 +200,12 @@ mirror. Diff turn to turn into `trade_route_established` /
 `trade_route_ended`. Today the log has one `trade_route_plundered`
 event and no idea what was plundered or who lost it.
 
-### City-state relations
+### City-state relations - the roster half implemented
+
+The static half landed as `civ.cityStateRoster()`, carried by
+`session_started`: trait, Lekmod personality, unique unit and plot. See
+`implemented-changes.md`, "Name what each city-state is before anyone
+allies with it". What follows is the per-turn half, still owed.
 
 Hooks cover the transitions (`SetAlly`, `MinorFriendsChanged`,
 `MinorAlliesChanged`) but not the standing state or its causes:
