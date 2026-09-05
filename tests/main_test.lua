@@ -34,10 +34,10 @@ t.test("start emits a prefixed session_started record when enabled", function()
   t.assert_match('"event":"session_started"', lines[1])
 end)
 
-t.test("start registers the snapshot extractor and the seven per-turn pollers", function()
+t.test("start registers the snapshot extractor and the eight per-turn pollers", function()
   local g, handlers = fakes.gameGlobals(1)
   main.start(g)
-  t.assert_equal(8, #handlers.PlayerDoTurn)
+  t.assert_equal(9, #handlers.PlayerDoTurn)
 end)
 
 t.test("start registers the victory watcher", function()

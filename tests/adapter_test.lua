@@ -1266,3 +1266,133 @@ end)
 t.test("cityStateSnapshot says nobody holds a city-state rather than naming -1", function()
   t.assert_nil(cityStateCiv.cityStateSnapshot()[3].ally)
 end)
+
+-- Rows in the shape GetTradeRoutes pushes them (CvLuaPlayer.cpp:4682):
+-- yields Times100, enums as numbers, religion NO_RELIGION as -1. Only
+-- routes the player originates are listed, so polling every major covers
+-- each route exactly once - GetTradeRoutesToYou is its mirror and would
+-- count them twice.
+local function tradeCity(name, x, y)
+  return {
+    name = name,
+    GetX = function() return x end,
+    GetY = function() return y end,
+  }
+end
+
+local function tradeRoute(spec)
+  return {
+    Domain = spec.domain, ConnectionType = spec.connection,
+    FromID = spec.fromId, FromCity = spec.from, FromCityName = spec.from.name,
+    ToID = spec.toId, ToCity = spec.to, ToCityName = spec.to.name,
+    FromGPT = spec.fromGold or 0, ToGPT = spec.toGold or 0,
+    ToFood = spec.toFood or 0, ToProduction = spec.toProduction or 0,
+    FromScience = spec.fromScience or 0, ToScience = spec.toScience or 0,
+    FromReligion = spec.fromReligion or -1, FromPressure = spec.fromPressure or 0,
+    ToReligion = spec.toReligion or -1, ToPressure = spec.toPressure or 0,
+    FromTourism = spec.fromTourism or 0, ToTourism = spec.toTourism or 0,
+    TurnsLeft = spec.turnsLeft,
+  }
+end
+
+local function tradePlayer(spec)
+  return {
+    IsAlive = function() return spec.alive ~= false end,
+    IsMinorCiv = function() return spec.minor == true end,
+    IsBarbarian = function() return spec.barbarian == true end,
+    GetCivilizationShortDescription = function() return spec.civ end,
+    GetTradeRoutes = function() return spec.routes or {} end,
+  }
+end
+
+local WARSAW = tradeCity("Warsaw", 10, 20)
+local KRAKOW = tradeCity("Krakow", 8, 25)
+local ANTIUM = tradeCity("Antium", 40, 3)
+
+local tradeGlobals = {
+  Game = { GetReligionName = function(id)
+    return ({ [3] = "Christianity", [5] = "Islam" })[id]
+  end },
+  GameDefines = { MAX_CIV_PLAYERS = 3 },
+  Players = {
+    [0] = tradePlayer({ civ = "Poland", routes = {
+      tradeRoute({ domain = 0, connection = 0, fromId = 0, from = WARSAW,
+                   toId = 1, to = ANTIUM, fromGold = 450, toGold = 210,
+                   fromScience = 150, toScience = 80,
+                   toReligion = 3, toPressure = 12,
+                   fromReligion = 5, fromPressure = 9,
+                   fromTourism = 2, toTourism = 7, turnsLeft = 21 }),
+      tradeRoute({ domain = 2, connection = 1, fromId = 0, from = KRAKOW,
+                   toId = 0, to = WARSAW, toFood = 300, turnsLeft = 30 }),
+    } }),
+    [1] = tradePlayer({ civ = "Rome", routes = {
+      tradeRoute({ domain = 0, connection = 0, fromId = 1, from = ANTIUM,
+                   toId = 0, to = WARSAW, fromGold = 300, turnsLeft = 25,
+                   toReligion = 5, toPressure = 9,
+                   fromReligion = 3, fromPressure = 12 }),
+    } }),
+    [2] = tradePlayer({ civ = "Barbarians", barbarian = true }),
+  },
+}
+local tradeCiv = adapter.new(tradeGlobals)
+
+-- Keyed rather than listed because the poller diffs one turn against the
+-- next, and a route has no id of its own that Lua can see. The plots are
+-- the key because they are exactly what the DLL forbids a duplicate of:
+-- CvGameTrade::CanCreateTradeRoute rejects a second route with the same
+-- origin and destination plot, whatever its domain, type or owner
+-- (CvTradeClasses.cpp:225-240).
+t.test("tradeRoutes reports every route a major originates, keyed by its plots", function()
+  t.assert_deep_equal({
+    ["10,20>40,3"] = {
+      civ = "Poland", from_city = "Warsaw", to_civ = "Rome", to_city = "Antium",
+      type = "international", domain = "sea", turns_left = 21,
+      from_gold = 4.5, to_gold = 2.1, from_science = 1.5, to_science = 0.8,
+      from_tourism = 2, to_tourism = 7,
+      to_religion = "Christianity", to_pressure = 12,
+      from_religion = "Islam", from_pressure = 9,
+    },
+    ["8,25>10,20"] = {
+      civ = "Poland", from_city = "Krakow", to_civ = "Poland", to_city = "Warsaw",
+      type = "food", domain = "land", turns_left = 30, to_food = 3,
+    },
+    ["40,3>10,20"] = {
+      civ = "Rome", from_city = "Antium", to_civ = "Poland", to_city = "Warsaw",
+      type = "international", domain = "sea", turns_left = 25, from_gold = 3,
+      to_religion = "Islam", to_pressure = 9,
+      from_religion = "Christianity", from_pressure = 12,
+    },
+  }, tradeCiv.tradeRoutes())
+end)
+
+-- The one duplicate the DLL does allow, and the reason the key is
+-- directed: Antium->Warsaw stands beside Warsaw->Antium as its own deal,
+-- earning its own side its own gold.
+t.test("tradeRoutes keeps the route running the other way apart", function()
+  local routes = tradeCiv.tradeRoutes()
+  t.assert_equal("Rome", routes["40,3>10,20"].civ)
+end)
+
+t.test("tradeRoutes leaves out a yield the route does not carry", function()
+  t.assert_nil(tradeCiv.tradeRoutes()["8,25>10,20"].from_gold)
+end)
+
+-- A caravan pushes each city's own majority religion at the other, so a
+-- route between two believing cities carries pressure both ways, and the
+-- two religions need not be the same one (CvLuaPlayer.cpp:4755-4756).
+t.test("tradeRoutes records the pressure a route carries in both directions", function()
+  local route = tradeCiv.tradeRoutes()["10,20>40,3"]
+  t.assert_deep_equal({ "Christianity", 12, "Islam", 9 },
+    { route.to_religion, route.to_pressure, route.from_religion, route.from_pressure })
+end)
+
+-- Zero pressure is not "nobody believes here". WouldExertTradeRoutePressureToward
+-- returns nothing when the cities sit within RELIGION_ADJACENT_CITY_DISTANCE
+-- of each other (CvReligionClasses.cpp:3802-3812), because proximity already
+-- spreads the faith and the route adds nothing on top - which is the usual
+-- case for a short domestic caravan.
+t.test("tradeRoutes leaves out pressure a route adds nothing to", function()
+  local route = tradeCiv.tradeRoutes()["8,25>10,20"]
+  t.assert_deep_equal({}, { route.to_religion, route.to_pressure,
+    route.from_religion, route.from_pressure })
+end)

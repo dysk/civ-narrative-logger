@@ -514,3 +514,81 @@ Still out: the quests. `MinorCivQuestTypes` is a C++ enum
 (`CvMinorCivAI.h:50-71`), not a database table, so iterating it means
 hardcoding a range and re-checking it against every Lekmod release -
 the only part of this with a real maintenance cost.
+
+## Say what a trade route was worth to both sides
+
+`src/trade_routes.lua` diffs the routes in play into
+`trade_route_established` and `trade_route_ended`.
+
+```json
+{"civ":"Poland","domain":"sea","event":"trade_route_established",
+ "from_city":"Warsaw","from_gold":4.5,"from_pressure":9,
+ "from_religion":"Islam","from_science":1.5,"from_tourism":2,
+ "to_city":"Antium","to_civ":"Rome","to_gold":2.1,"to_pressure":12,
+ "to_religion":"Christianity","to_science":0.8,"to_tourism":7,
+ "turn":11,"turns_left":21,"type":"international"}
+```
+
+Until now the log carried a single `trade_route_plundered` naming the
+plunderer and a plot, with no record of what was plundered or who lost
+it. Ending is now its own event, and a plundered route is told from an
+expired one by the plunder record of the same turn.
+
+### Ask each major once
+
+`GetTradeRoutes` lists only the routes a player originates
+(`CvLuaPlayer.cpp:4701-4704`), so asking every living major covers every
+route exactly once. `GetTradeRoutesToYou` is its mirror - it would count
+each international route a second time and no internal one at all.
+
+### The key is the pair of plots
+
+A route has no id reachable from Lua, and its slot in
+`m_aTradeConnections` is reused once freed, so the poller diffs on a key
+built from the two plots. That is exactly the DLL's own uniqueness rule:
+`CvGameTrade::CanCreateTradeRoute` rejects a second route by comparing
+origin and destination coordinates and nothing else - not the domain,
+not the connection type, not the owner (`CvTradeClasses.cpp:225-240`).
+There is no such thing as two caravans on one road.
+
+The key is directed, because the same road running back the other way is
+a separate route with its own terms: `Antium->Warsaw` stands beside
+`Warsaw->Antium` and earns Rome its own gold.
+
+Plots rather than city names, because a city can be renamed or captured
+while the route it carries stands.
+
+### Pressure runs both ways, and zero has two meanings
+
+A caravan pushes each city's own majority religion at the other, in both
+directions and independently (`CvLuaPlayer.cpp:4755-4756`), so the two
+religions on one route need not be the same one.
+
+Absent pressure does not mean nobody believes there.
+`WouldExertTradeRoutePressureToward` answers nothing when the source
+city has no religious majority, and also when the two cities sit within
+`RELIGION_ADJACENT_CITY_DISTANCE` of each other
+(`CvReligionClasses.cpp:3802-3812`) - proximity already spreads the
+faith and the route adds nothing on top. That second case is the usual
+one for a short domestic caravan, so most food and production routes
+report no pressure while both their cities are fully converted.
+
+### Reading the record
+
+`turns_left` is what the DLL computes as
+`m_iTurnRouteComplete - getGameTurn()`, so it is the remainder at the
+moment the route was noticed, not the length of its term. Added to
+`turn` it gives the turn the route expires.
+
+Yields come out of the DLL Times100 and are divided; tourism and
+pressure are already whole. The omit rule applies as everywhere else, so
+a domestic food caravan is four fields and a type rather than a row of
+zeroes.
+
+`DomainTypes` is not a two-value enum - `DOMAIN_AIR` sits between them,
+so land is 2 and sea is 0 (`CvEnums.h:1490-1497`).
+
+Cost worth knowing: `GetTradeRoutes` recomputes religious pressure and
+tourism multipliers for every route on every call, and the poll asks
+every major once a turn. Nothing measured yet, but this is the most
+expensive poll in the logger.

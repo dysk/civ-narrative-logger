@@ -865,6 +865,85 @@ function M.new(g)
     return snapshot
   end
 
+  local TRADE_CONNECTIONS = { [0] = "international", [1] = "food", [2] = "production" }
+
+  -- DomainTypes is not a two-value enum: DOMAIN_AIR sits between sea and
+  -- land, so land is 2 (CvEnums.h:1490-1497).
+  local TRADE_DOMAINS = { [0] = "sea", [2] = "land" }
+
+  local function nonZero(value)
+    return value ~= 0 and value or nil
+  end
+
+  local function scaledNonZero(value)
+    return value ~= 0 and value / 100 or nil
+  end
+
+  -- A caravan pushes each city's own majority religion at the other, so
+  -- both directions are read. Nothing is answered when the source city
+  -- has no majority, and also when the two cities sit within
+  -- RELIGION_ADJACENT_CITY_DISTANCE (CvReligionClasses.cpp:3802-3812):
+  -- proximity already spreads the faith and the route adds nothing on
+  -- top, which is the usual case for a short domestic caravan.
+  local function pressureOf(religionId, pressure)
+    if pressure == 0 or religionId < 0 then return nil, nil end
+    return civ.religionName(religionId), pressure
+  end
+
+  local function tradeRouteRecord(row)
+    local toReligion, toPressure = pressureOf(row.ToReligion, row.ToPressure)
+    local fromReligion, fromPressure = pressureOf(row.FromReligion, row.FromPressure)
+    return {
+      civ = civ.civName(row.FromID),
+      from_city = row.FromCityName,
+      to_civ = civ.civName(row.ToID),
+      to_city = row.ToCityName,
+      type = TRADE_CONNECTIONS[row.ConnectionType],
+      domain = TRADE_DOMAINS[row.Domain],
+      turns_left = row.TurnsLeft,
+      from_gold = scaledNonZero(row.FromGPT),
+      to_gold = scaledNonZero(row.ToGPT),
+      to_food = scaledNonZero(row.ToFood),
+      to_production = scaledNonZero(row.ToProduction),
+      from_science = scaledNonZero(row.FromScience),
+      to_science = scaledNonZero(row.ToScience),
+      from_tourism = nonZero(row.FromTourism),
+      to_tourism = nonZero(row.ToTourism),
+      to_religion = toReligion,
+      to_pressure = toPressure,
+      from_religion = fromReligion,
+      from_pressure = fromPressure,
+    }
+  end
+
+  -- A route has no id Lua can see, so the poller diffs on this key. The
+  -- two plots are exactly what the DLL forbids a second route with:
+  -- CvGameTrade::CanCreateTradeRoute compares origin and destination
+  -- coordinates and nothing else - not the domain, type or owner
+  -- (CvTradeClasses.cpp:225-240). The arrow is directed because the same
+  -- road running back the other way is its own route, earning its own
+  -- side its own gold. Plots rather than names, because a city can be
+  -- renamed or captured and keep carrying the route.
+  local function tradeRouteKey(row)
+    return row.FromCity:GetX() .. "," .. row.FromCity:GetY()
+      .. ">" .. row.ToCity:GetX() .. "," .. row.ToCity:GetY()
+  end
+
+  -- GetTradeRoutes lists only what the player originates, so asking
+  -- every major covers each route exactly once. GetTradeRoutesToYou is
+  -- its mirror and would count them twice.
+  function civ.tradeRoutes()
+    local routes = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if isLivingMajor(g.Players[i]) then
+        for _, row in ipairs(g.Players[i]:GetTradeRoutes()) do
+          routes[tradeRouteKey(row)] = tradeRouteRecord(row)
+        end
+      end
+    end
+    return routes
+  end
+
   -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
   -- game sets them together (CvGame::setWinner), so the team alone
   -- answers "is it over".
@@ -2272,6 +2351,93 @@ end
 return M
 end)
 
+register("src.trade_routes", function()
+-- Polls the trade routes in play and diffs them into events. A route is
+-- a deal, and the log has never said what either party got out of one:
+-- today there is a single trade_route_plundered and no record of what
+-- was plundered or who lost it.
+--
+-- Diffed rather than snapshotted because a route stands for tens of
+-- turns and its terms are fixed when it opens. Two records over its life
+-- say everything a per-turn stream would.
+--
+-- The first poll of a session is only a baseline: a reload must not
+-- re-announce sixty routes that were each announced when they opened.
+--
+-- Registered on PlayerDoTurn like the other stateful pollers and gated
+-- on the turn, because the route list is game-global while PlayerDoTurn
+-- fires once per living player.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (trade routes)", error = tostring(err) }
+end
+
+-- pairs() order is undefined, and the log is compared line by line.
+local function sortedKeys(t)
+  local keys = {}
+  for key in pairs(t) do table.insert(keys, key) end
+  table.sort(keys)
+  return keys
+end
+
+local function establishedRecord(turn, route)
+  local record = { event = "trade_route_established", turn = turn }
+  for field, value in pairs(route) do record[field] = value end
+  return record
+end
+
+-- Only which route ended. What it was worth was said when it opened, and
+-- a plundered route is told from an expired one by the
+-- trade_route_plundered of the same turn.
+local function endedRecord(turn, route)
+  return {
+    event = "trade_route_ended",
+    turn = turn,
+    civ = route.civ,
+    from_city = route.from_city,
+    to_civ = route.to_civ,
+    to_city = route.to_city,
+  }
+end
+
+local function diff(sink, turn, known, routes)
+  for _, key in ipairs(sortedKeys(routes)) do
+    if not known[key] then
+      sink(json.encode(establishedRecord(turn, routes[key])))
+    end
+  end
+  for _, key in ipairs(sortedKeys(known)) do
+    if not routes[key] then
+      sink(json.encode(endedRecord(turn, known[key])))
+    end
+  end
+end
+
+function M.new(civ, sink)
+  local state = { turn = nil, routes = nil }
+
+  local function poll()
+    local turn = civ.turn()
+    if turn == state.turn then return end
+    state.turn = turn
+
+    local routes = civ.tradeRoutes()
+    if state.routes then diff(sink, turn, state.routes, routes) end
+    state.routes = routes
+  end
+
+  return function()
+    local ok, err = pcall(poll)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.main", function()
 -- Entry point: gate on the local opt-in flag, then wire the logger
 -- to the real game. Receives the game globals as a table so tests
@@ -2287,6 +2453,7 @@ local congress = _require("src.congress")
 local victory = _require("src.victory")
 local diplomacy = _require("src.diplomacy")
 local cityStates = _require("src.city_states")
+local tradeRoutes = _require("src.trade_routes")
 
 local M = {}
 
@@ -2313,6 +2480,7 @@ function M.start(g)
   g.GameEvents.PlayerDoTurn.Add(congress.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(cityStates.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(tradeRoutes.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
 

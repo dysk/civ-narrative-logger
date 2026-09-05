@@ -14,6 +14,7 @@ local FILES = {
   "src.victory",
   "src.diplomacy",
   "src.city_states",
+  "src.trade_routes",
   "src.main",
 }
 

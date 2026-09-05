@@ -191,14 +191,13 @@ If volume needs cutting, emit on change rather than per turn — but
 prefer the simple version first; "capture everything, filter
 downstream" is the repo's standing decision.
 
-### Trade routes
+### Trade routes - implemented
 
-`Player:GetTradeRoutes()` returns, per route, origin and destination
-city and owner plus the gold/food/production/science each side earns
-(`CvLuaPlayer.cpp:lGetTradeRoutes`), and `GetTradeRoutesToYou()` the
-mirror. Diff turn to turn into `trade_route_established` /
-`trade_route_ended`. Today the log has one `trade_route_plundered`
-event and no idea what was plundered or who lost it.
+Landed as `civ.tradeRoutes()` and `src/trade_routes.lua`, with the
+religious pressure and tourism the payload also carries. See
+`implemented-changes.md`, "Say what a trade route was worth to both
+sides". `GetTradeRoutesToYou` turned out to be a mirror rather than an
+addition, and is not used.
 
 ### City-state relations - implemented but for the quests
 
