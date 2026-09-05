@@ -60,8 +60,9 @@ the game globals as a parameter and is tested against fakes.
 | `src/json.lua` | minimal deterministic JSON encoder (sandbox has none) |
 | `src/main.lua` | entry point: opt-in gate, CIVLOG| print-sink, wiring |
 | `tests/` | test suite + ~70-line harness (`tests/run.lua`) |
-| `tools/` | build script, LEKMOD installer, Lua.log parser, enable-flag file + install docs |
-| `dist/` | the generated game-loadable file (committed; rebuild after src changes) |
+| `tools/` | build script, event-type generator, LEKMOD installer, Lua.log parser, enable-flag file + install docs |
+| `dist/CivNarrativeLogger.lua` | the generated game-loadable file (committed; rebuild after src changes) |
+| `dist/event-types.json` | the event types the logger can write, generated for the analyst (`luajit tools/event_types.lua`) |
 | `docs/design-decisions.md` | every non-obvious choice and its why |
 | `docs/lekmod-gameevents.md` | authoritative hook list, extracted from the Lekmod DLL source |
 | `docs/lekmod-lua-api.md` | what the DLL's Lua bindings expose to a poller, and the dead ends |

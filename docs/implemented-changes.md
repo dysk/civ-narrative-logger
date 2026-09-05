@@ -680,3 +680,47 @@ No era gate is needed to keep this cheap. Before the Renaissance
 `m_aSpyList` is empty and `GetEspionageSpies` returns without doing
 anything, which is less work per turn than the diplomacy poller does
 from turn one.
+
+## Publish the list of event types instead of keeping two copies of it
+
+The analyst holds `KNOWN_EVENT_TYPES` and a
+`logger_event_types.jsonl` fixture, both hand-written, both a copy of
+what this logger emits. `docs/import-volume.md` there deferred
+generating them with an explicit condition: worth doing only if the
+fixture turns out to drift anyway. It drifted twice - `building_granted`
+and `free_buildings_ready` in the free-buildings work, then eleven more
+across city-states, trade routes and spies - so `dist/event-types.json`
+is now generated here and is the one copy.
+
+### Why the list cannot be read off the source
+
+An event name reaches a record in four shapes:
+
+```lua
+event = "city_state_snapshot"                                 -- a literal field
+event = relation.protected and "city_state_protected"         -- one side of a conditional
+       or "city_state_protection_ended"
+{ flag = "dof", up = "friendship_declared", down = "friendship_ended" }  -- a transition table
+record("spy_created", turn, spies[key])                       -- an argument to a helper
+```
+
+Grepping `event = "..."` finds 62 of the 83. Widening the pattern to any
+snake_case literal does not help: `"gold"`, `"faith"`, `"ally"`,
+`"land"` and `"recruit"` are shaped exactly like an event name. Nothing
+in the text separates the two.
+
+### What separates them at run time
+
+Every record carries an `event` field, and every record leaves by one of
+two routes - an extractor returns it, or a poller encodes it. Wrapping
+those two while the tests run collects the names with no pattern
+matching at all (`tools/event_types.lua`). Regenerate with
+`luajit tools/event_types.lua`; `tests/run.lua` registers a last test
+that fails when the committed file has fallen behind.
+
+A type is therefore listed exactly when some test produces it, which
+makes the artefact a coverage report as well. Generating it the first
+time showed `defensive_pact_ended`, `embassy_ended` and
+`trade_agreement_ended` sitting in `src/diplomacy.lua` with no test
+reaching them - three transitions the analyst knew about and the suite
+did not. They are covered now.
