@@ -1396,3 +1396,107 @@ t.test("tradeRoutes leaves out pressure a route adds nothing to", function()
   t.assert_deep_equal({}, { route.to_religion, route.to_pressure,
     route.from_religion, route.from_pressure })
 end)
+
+-- Rows in the shape GetEspionageSpies pushes them
+-- (CvLuaPlayer.cpp:11552): rank and state arrive as translation keys
+-- rather than numbers, and an unassigned spy sits at plot -1,-1.
+-- A state with no end time - unassigned, counter-intel, schmoozing,
+-- dead - answers -1 for its progress (CvEspionageClasses.cpp:2504-2514),
+-- which is why absence is read from the sign and not from zero: zero is
+-- a spy that has just arrived and begun.
+local function spyRow(spec)
+  return {
+    AgentID = spec.id,
+    Name = spec.name,
+    Rank = spec.rank or "TXT_KEY_SPY_RANK_0",
+    State = spec.state,
+    CityX = spec.x or -1,
+    CityY = spec.y or -1,
+    TurnsLeft = spec.turnsLeft or -1,
+    PercentComplete = spec.percent or -1,
+    EstablishedSurveillance = spec.surveillance == true,
+    IsDiplomat = spec.diplomat == true,
+  }
+end
+
+local function spyPlayer(spec)
+  return {
+    IsAlive = function() return spec.alive ~= false end,
+    IsMinorCiv = function() return spec.minor == true end,
+    IsBarbarian = function() return spec.barbarian == true end,
+    GetCivilizationShortDescription = function() return spec.civ end,
+    GetEspionageSpies = function() return spec.spies or {} end,
+  }
+end
+
+local spyGlobals = {
+  GameDefines = { MAX_CIV_PLAYERS = 3 },
+  Map = {
+    GetPlot = function(x, y)
+      local cities = {
+        ["40,3"] = { name = "Antium", owner = 1 },
+        ["10,20"] = { name = "Warsaw", owner = 0 },
+      }
+      local city = cities[x .. "," .. y]
+      return {
+        GetPlotCity = function()
+          if not city then return nil end
+          return {
+            GetName = function() return city.name end,
+            GetOwner = function() return city.owner end,
+          }
+        end,
+      }
+    end,
+  },
+  Players = {
+    [0] = spyPlayer({ civ = "Poland", spies = {
+      spyRow({ id = 0, name = "Alexis", rank = "TXT_KEY_SPY_RANK_1",
+               state = "TXT_KEY_SPY_STATE_GATHERING_INTEL",
+               x = 40, y = 3, turnsLeft = 6, percent = 62, surveillance = true }),
+      spyRow({ id = 1, name = "Marie", state = "TXT_KEY_SPY_STATE_UNASSIGNED" }),
+    } }),
+    [1] = spyPlayer({ civ = "Rome", spies = {
+      spyRow({ id = 0, name = "Lucius", rank = "TXT_KEY_SPY_RANK_2",
+               state = "TXT_KEY_SPY_STATE_COUNTER_INTEL", x = 10, y = 20 }),
+    } }),
+    [2] = spyPlayer({ civ = "Barbarians", barbarian = true }),
+  },
+}
+local spyCiv = adapter.new(spyGlobals)
+
+-- Keyed on player and AgentID because that pair is stable for the whole
+-- game: AgentID is the index into m_aSpyList and the list only ever
+-- grows - a killed spy stays in it with state dead rather than being
+-- removed (CvEspionageClasses.cpp:11560, :928).
+t.test("spies reports every major's spies, keyed by player and agent", function()
+  t.assert_deep_equal({
+    ["0:0"] = {
+      civ = "Poland", spy = "Alexis", rank = "agent", state = "gathering_intel",
+      city = "Antium", city_civ = "Rome", x = 40, y = 3,
+      turns_left = 6, progress = 62, surveillance = true,
+    },
+    ["0:1"] = {
+      civ = "Poland", spy = "Marie", rank = "recruit", state = "unassigned",
+    },
+    ["1:0"] = {
+      civ = "Rome", spy = "Lucius", rank = "special_agent", state = "counter_intel",
+      city = "Warsaw", city_civ = "Poland", x = 10, y = 20,
+    },
+  }, spyCiv.spies())
+end)
+
+-- Translation keys are what the DLL answers with; the log carries names.
+t.test("spies names the rank and the state rather than their text keys", function()
+  local spy = spyCiv.spies()["1:0"]
+  t.assert_deep_equal({ "special_agent", "counter_intel" }, { spy.rank, spy.state })
+end)
+
+t.test("spies leaves an unassigned spy without a city or a plot", function()
+  local spy = spyCiv.spies()["0:1"]
+  t.assert_deep_equal({}, { spy.city, spy.city_civ, spy.x, spy.y })
+end)
+
+t.test("spies says whose city a spy is sitting in", function()
+  t.assert_equal("Rome", spyCiv.spies()["0:0"].city_civ)
+end)

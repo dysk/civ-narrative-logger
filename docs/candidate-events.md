@@ -216,14 +216,25 @@ swings. The obstacle is not the reading but the iteration:
 database table behind it, so the eighteen types would have to be
 hardcoded and re-checked against every Lekmod release.
 
-### Espionage
+### Espionage - implemented
 
-Entirely absent from the log. `Player:GetEspionageSpies()` returns each
-spy's name, rank, state (`TXT_KEY_SPY_STATE_*`), city coordinates,
-turns until the state completes and whether surveillance is
-established; `GetEspionageCityStatus()` covers the other side.
-A per-turn spy roster, diffed, gives spy moved / coup / tech steal
-without a single hook.
+Landed as `civ.spies()` and `src/spies.lua`. See
+`implemented-changes.md`, "Follow the spies, without following every
+turn of their work".
+
+Two things were left out deliberately. `GetEspionageCityStatus()`
+returns every city in the game rated for espionage potential from the
+asking player's view - at eight majors that is several hundred rows a
+turn describing where a spy *could* go, which is an assessment rather
+than a fact that can be lost. And the intrigue messages
+(`GetIntrigueMessages`) read the AI's own internals to build them:
+`GetSneakAttackOperation` looks for `AI_OPERATION_*` and the deception
+case compares `GetMajorCivApproach` honest against surface
+(`CvEspionageClasses.cpp:1085, 1140-1157`). Human players have neither,
+so between humans those messages never fire; the one case that would,
+a wonder under construction, is already in `city_snapshot` every turn.
+Lua receives only the rendered sentence anyway - the structured fields
+the message is built from are not pushed (`CvLuaPlayer.cpp:11795-11820`).
 
 ## Tier 3 — considered and left out, with the reason
 
@@ -258,13 +269,17 @@ from a finished game - the ending, the deaths, the treaties, what
 everyone was researching, and when each turn actually happened - and
 all of them now land in the log before the first human game.
 
-The city snapshot from Tier 2 landed with them, because production is
-the one thing that shows a wonder race and the turn somebody lost it.
-What remains in Tier 2 is trade routes, city-state relations with their
-quests, and espionage: none of it harder than what is already here,
-only bigger, and each of them leaves at least some indirect trace in a
-finished log, which is why they waited. Tier 3 stays as written - the
-reasons for leaving those out have not changed.
+Tier 2 is done too. The city snapshot landed with Tier 1, because
+production is the one thing that shows a wonder race and the turn
+somebody lost it; trade routes, city-state relations and espionage
+followed. One item is deliberately left standing: the city-state quests,
+whose type list is a C++ enum with no database table behind it, so
+iterating them means hardcoding a range and re-checking it against every
+Lekmod release. That is the only outstanding cost of maintenance in the
+whole list, which is why it waits for a game that shows it is worth it.
+
+Tier 3 stays as written - the reasons for leaving those out have not
+changed.
 
 Before adding more volume, note that the analyst's import path is the
 binding constraint now, not the logger: see `docs/import-volume.md` in

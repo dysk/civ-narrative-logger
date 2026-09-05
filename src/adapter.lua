@@ -888,6 +888,72 @@ function M.new(g)
     return routes
   end
 
+  local SPY_RANKS = {
+    TXT_KEY_SPY_RANK_0 = "recruit",
+    TXT_KEY_SPY_RANK_1 = "agent",
+    TXT_KEY_SPY_RANK_2 = "special_agent",
+  }
+
+  local SPY_STATES = {
+    TXT_KEY_SPY_STATE_UNASSIGNED = "unassigned",
+    TXT_KEY_SPY_STATE_TRAVELLING = "travelling",
+    TXT_KEY_SPY_STATE_SURVEILLANCE = "surveillance",
+    TXT_KEY_SPY_STATE_GATHERING_INTEL = "gathering_intel",
+    TXT_KEY_SPY_STATE_RIGGING_ELECTION = "rigging_election",
+    TXT_KEY_SPY_STATE_COUNTER_INTEL = "counter_intel",
+    TXT_KEY_SPY_STATE_MAKING_INTRODUCTIONS = "making_introductions",
+    TXT_KEY_SPY_STATE_SCHMOOZING = "schmoozing",
+    TXT_KEY_SPY_STATE_DEAD = "dead",
+  }
+
+  -- Rank and state arrive as translation keys rather than numbers
+  -- (CvLuaPlayer.cpp:11580-11630); the log carries names.
+  --
+  -- Progress and turns left are absent when negative, not when zero. A
+  -- state with no end time - unassigned, counter-intel, schmoozing,
+  -- dead - answers -1 (CvEspionageClasses.cpp:2504-2514), while zero is
+  -- a spy that has just arrived and begun, which the poller has to be
+  -- able to tell from a mission that finished and reset.
+  local function spyRecord(p, row)
+    local record = {
+      civ = p:GetCivilizationShortDescription(),
+      spy = row.Name,
+      rank = SPY_RANKS[row.Rank],
+      state = SPY_STATES[row.State],
+      turns_left = row.TurnsLeft >= 0 and row.TurnsLeft or nil,
+      progress = row.PercentComplete >= 0 and row.PercentComplete or nil,
+      surveillance = row.EstablishedSurveillance or nil,
+      diplomat = row.IsDiplomat or nil,
+    }
+    if row.CityX >= 0 then
+      record.city = civ.cityNameAt(row.CityX, row.CityY)
+      record.city_civ = civ.cityOwnerAt(row.CityX, row.CityY)
+      record.x, record.y = row.CityX, row.CityY
+    end
+    return record
+  end
+
+  -- Keyed on player and AgentID because that pair is stable for the
+  -- whole game: AgentID is the index into m_aSpyList and the list only
+  -- grows - a killed spy stays in it marked dead and later revives in
+  -- the same slot under a new name (CvEspionageClasses.cpp:928-936).
+  --
+  -- Every major is asked, so this is the whole board including spies
+  -- their targets never noticed. No era gate: before the Renaissance
+  -- m_aSpyList is empty and the loop body never runs.
+  function civ.spies()
+    local spies = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        for _, row in ipairs(p:GetEspionageSpies()) do
+          spies[i .. ":" .. row.AgentID] = spyRecord(p, row)
+        end
+      end
+    end
+    return spies
+  end
+
   -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
   -- game sets them together (CvGame::setWinner), so the team alone
   -- answers "is it over".

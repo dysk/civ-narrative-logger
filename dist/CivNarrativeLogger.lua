@@ -944,6 +944,72 @@ function M.new(g)
     return routes
   end
 
+  local SPY_RANKS = {
+    TXT_KEY_SPY_RANK_0 = "recruit",
+    TXT_KEY_SPY_RANK_1 = "agent",
+    TXT_KEY_SPY_RANK_2 = "special_agent",
+  }
+
+  local SPY_STATES = {
+    TXT_KEY_SPY_STATE_UNASSIGNED = "unassigned",
+    TXT_KEY_SPY_STATE_TRAVELLING = "travelling",
+    TXT_KEY_SPY_STATE_SURVEILLANCE = "surveillance",
+    TXT_KEY_SPY_STATE_GATHERING_INTEL = "gathering_intel",
+    TXT_KEY_SPY_STATE_RIGGING_ELECTION = "rigging_election",
+    TXT_KEY_SPY_STATE_COUNTER_INTEL = "counter_intel",
+    TXT_KEY_SPY_STATE_MAKING_INTRODUCTIONS = "making_introductions",
+    TXT_KEY_SPY_STATE_SCHMOOZING = "schmoozing",
+    TXT_KEY_SPY_STATE_DEAD = "dead",
+  }
+
+  -- Rank and state arrive as translation keys rather than numbers
+  -- (CvLuaPlayer.cpp:11580-11630); the log carries names.
+  --
+  -- Progress and turns left are absent when negative, not when zero. A
+  -- state with no end time - unassigned, counter-intel, schmoozing,
+  -- dead - answers -1 (CvEspionageClasses.cpp:2504-2514), while zero is
+  -- a spy that has just arrived and begun, which the poller has to be
+  -- able to tell from a mission that finished and reset.
+  local function spyRecord(p, row)
+    local record = {
+      civ = p:GetCivilizationShortDescription(),
+      spy = row.Name,
+      rank = SPY_RANKS[row.Rank],
+      state = SPY_STATES[row.State],
+      turns_left = row.TurnsLeft >= 0 and row.TurnsLeft or nil,
+      progress = row.PercentComplete >= 0 and row.PercentComplete or nil,
+      surveillance = row.EstablishedSurveillance or nil,
+      diplomat = row.IsDiplomat or nil,
+    }
+    if row.CityX >= 0 then
+      record.city = civ.cityNameAt(row.CityX, row.CityY)
+      record.city_civ = civ.cityOwnerAt(row.CityX, row.CityY)
+      record.x, record.y = row.CityX, row.CityY
+    end
+    return record
+  end
+
+  -- Keyed on player and AgentID because that pair is stable for the
+  -- whole game: AgentID is the index into m_aSpyList and the list only
+  -- grows - a killed spy stays in it marked dead and later revives in
+  -- the same slot under a new name (CvEspionageClasses.cpp:928-936).
+  --
+  -- Every major is asked, so this is the whole board including spies
+  -- their targets never noticed. No era gate: before the Renaissance
+  -- m_aSpyList is empty and the loop body never runs.
+  function civ.spies()
+    local spies = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      local p = g.Players[i]
+      if isLivingMajor(p) then
+        for _, row in ipairs(p:GetEspionageSpies()) do
+          spies[i .. ":" .. row.AgentID] = spyRecord(p, row)
+        end
+      end
+    end
+    return spies
+  end
+
   -- Both are NO_TEAM/NO_VICTORY (-1) until the game is decided, and the
   -- game sets them together (CvGame::setWinner), so the team alone
   -- answers "is it over".
@@ -2438,6 +2504,123 @@ end
 return M
 end)
 
+register("src.spies", function()
+-- Polls every major's spies and diffs them into events. Espionage fires
+-- no hook at all - CvEspionageClasses.cpp calls LuaSupport::Call not
+-- once - so nothing here is pushed and all of it is read.
+--
+-- The state cycle a spy runs after being posted is fixed by where it was
+-- sent: travelling, surveillance, then gathering intel in a foreign
+-- city, rigging elections in a city-state, or counter-intelligence at
+-- home. Logging each of those turns would be four fifths of the records
+-- to say what the destination already says, so the posting is written
+-- and the cycle is not.
+--
+-- The first poll of a session is only a baseline.
+--
+-- Registered on PlayerDoTurn like the other stateful pollers and gated
+-- on the turn: the whole board is read at once while PlayerDoTurn fires
+-- once per living player.
+local json = _require("src.json")
+
+local M = {}
+
+local function errorRecord(err)
+  return { event = "logger_error", hook = "PlayerDoTurn (spies)", error = tostring(err) }
+end
+
+-- pairs() order is undefined, and the log is compared line by line.
+local function sortedKeys(t)
+  local keys = {}
+  for key in pairs(t) do table.insert(keys, key) end
+  table.sort(keys)
+  return keys
+end
+
+local function record(event, turn, spy, extra)
+  local out = { event = event, turn = turn, civ = spy.civ, spy = spy.spy }
+  for field, value in pairs(extra or {}) do out[field] = value end
+  return out
+end
+
+local function at(spy)
+  return { city = spy.city, city_civ = spy.city_civ }
+end
+
+local function posting(spy)
+  return { city = spy.city, city_civ = spy.city_civ,
+           x = spy.x, y = spy.y, state = spy.state }
+end
+
+local function completion(spy)
+  return { city = spy.city, city_civ = spy.city_civ, state = spy.state }
+end
+
+local function moved(known, spy)
+  return spy.x ~= nil and (known.x ~= spy.x or known.y ~= spy.y)
+end
+
+-- A finished mission neither moves the spy nor changes its state: the
+-- DLL resets the progress and sets the same activity going again
+-- (CvEspionageClasses.cpp:807-810 for a stolen tech, :900-903 for a
+-- rigged election). Progress otherwise only climbs, so a fall in place
+-- is the completion. A fall that comes with a move is the new posting.
+local function completed(known, spy)
+  return known.progress ~= nil and spy.progress ~= nil
+    and spy.progress < known.progress
+end
+
+local function diffSpy(sink, turn, known, spy)
+  if known.state == "dead" then
+    if spy.state ~= "dead" then sink(json.encode(record("spy_revived", turn, spy))) end
+    return
+  end
+  if spy.state == "dead" then
+    sink(json.encode(record("spy_killed", turn, spy, at(spy))))
+    return
+  end
+  if known.rank ~= spy.rank then
+    sink(json.encode(record("spy_promoted", turn, spy, { rank = spy.rank })))
+  end
+  if moved(known, spy) then
+    sink(json.encode(record("spy_moved", turn, spy, posting(spy))))
+  elseif completed(known, spy) then
+    sink(json.encode(record("spy_mission_completed", turn, spy, completion(spy))))
+  end
+end
+
+local function diff(sink, turn, known, spies)
+  for _, key in ipairs(sortedKeys(spies)) do
+    if known[key] then
+      diffSpy(sink, turn, known[key], spies[key])
+    else
+      sink(json.encode(record("spy_created", turn, spies[key])))
+    end
+  end
+end
+
+function M.new(civ, sink)
+  local state = { turn = nil, spies = nil }
+
+  local function poll()
+    local turn = civ.turn()
+    if turn == state.turn then return end
+    state.turn = turn
+
+    local spies = civ.spies()
+    if state.spies then diff(sink, turn, state.spies, spies) end
+    state.spies = spies
+  end
+
+  return function()
+    local ok, err = pcall(poll)
+    if not ok then sink(json.encode(errorRecord(err))) end
+  end
+end
+
+return M
+end)
+
 register("src.main", function()
 -- Entry point: gate on the local opt-in flag, then wire the logger
 -- to the real game. Receives the game globals as a table so tests
@@ -2454,6 +2637,7 @@ local victory = _require("src.victory")
 local diplomacy = _require("src.diplomacy")
 local cityStates = _require("src.city_states")
 local tradeRoutes = _require("src.trade_routes")
+local spies = _require("src.spies")
 
 local M = {}
 
@@ -2481,6 +2665,7 @@ function M.start(g)
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(cityStates.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(tradeRoutes.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(spies.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
 

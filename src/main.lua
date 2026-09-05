@@ -13,6 +13,7 @@ local victory = require("src.victory")
 local diplomacy = require("src.diplomacy")
 local cityStates = require("src.city_states")
 local tradeRoutes = require("src.trade_routes")
+local spies = require("src.spies")
 
 local M = {}
 
@@ -40,6 +41,7 @@ function M.start(g)
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(cityStates.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(tradeRoutes.new(deps.civ, deps.sink))
+  g.GameEvents.PlayerDoTurn.Add(spies.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
 

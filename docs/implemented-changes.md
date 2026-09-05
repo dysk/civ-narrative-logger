@@ -592,3 +592,91 @@ Cost worth knowing: `GetTradeRoutes` recomputes religious pressure and
 tourism multipliers for every route on every call, and the poll asks
 every major once a turn. Nothing measured yet, but this is the most
 expensive poll in the logger.
+
+## Follow the spies, without following every turn of their work
+
+`src/spies.lua` polls every major's spies and diffs them into
+`spy_created`, `spy_moved`, `spy_promoted`, `spy_killed`, `spy_revived`
+and `spy_mission_completed`.
+
+Espionage was entirely absent from the log, and it fires no hook at all:
+`CvEspionageClasses.cpp` calls `LuaSupport::Call` not once. Everything
+here is read.
+
+### The whole board, including what the victim never saw
+
+`GetEspionageSpies` answers with the asking player's own spies
+(`CvLuaPlayer.cpp:11552`), so asking every major yields every spy in the
+game - including the one nobody caught. The analyst is reading the game
+with the cards face up, which is true of the whole log but matters more
+here than anywhere else: in espionage the gap between what happened and
+what a player knew is most of the subject.
+
+### Keyed on the agent slot
+
+`AgentID` is the index into `m_aSpyList`, and that list only grows: a
+killed spy stays in it marked dead and later revives in the same slot
+under a new name (`CvEspionageClasses.cpp:928-936`). So `(player,
+AgentID)` is a stable key for the whole game, with none of the composing
+the trade routes needed.
+
+`spy_revived` exists because of that reuse. Without it the log would
+show one agent quietly renamed between a death and its next posting.
+
+### The posting is the decision; the cycle is not
+
+A spy's states after being posted follow from where it went: travelling,
+surveillance, then gathering intel in a foreign city, rigging elections
+in a city-state, or counter-intelligence at home. Logging each turn of
+that would be about 1100 records in a game to say what the destination
+already says. `spy_moved` carries the city, whose it is, and the state
+the spy settles into; the progression is left out.
+
+### Completion has to be inferred, but not guessed
+
+A finished mission neither moves the spy nor changes its state. The DLL
+calls `ResetProgress` and starts the same activity again, leaving the
+spy gathering intel in the same city (`CvEspionageClasses.cpp:807-810`);
+a rigged election resets the same way (`:900-903`). Progress otherwise
+only climbs, so a fall in place is the completion and a fall that comes
+with a move is the new posting. No threshold is involved.
+
+That one event covers both a stolen technology and a rigged election;
+`state` says which.
+
+What is still not readable is *which* technology was stolen. There is no
+API for it. The theft can be reconstructed: the thief gains a technology
+- the victim loses nothing, it is copied - and `snapshot` carries
+`researching` every turn, so a `tech_researched` that does not match
+what the thief was working on, on the turn of a completed
+`gathering_intel` mission, is the heist. That is the analyst's
+inference, not a fact this log states.
+
+`spy_promoted` is not a reliable substitute for it. `ESPIONAGE_SYSTEM_REWORK`
+is defined (`_Defines.h:1441`), so the level-up after a successful steal
+is conditional (`CvEspionageClasses.cpp:861-865`) rather than certain. A
+defending counter-spy is promoted for catching an intruder (`:696`),
+which makes a promotion at home an indirect sign of a catch.
+
+### Reading the record
+
+Progress and turns left are absent when negative, not when zero. A state
+with no end time - unassigned, counter-intel, schmoozing, dead - answers
+-1 (`CvEspionageClasses.cpp:2504-2514`), while zero is a spy that has
+just arrived and begun. Reading absence from zero would have hidden
+every mission that reset exactly to it.
+
+Rank and state come out of the DLL as translation keys
+(`TXT_KEY_SPY_RANK_1`, `TXT_KEY_SPY_STATE_GATHERING_INTEL`) rather than
+as type names, so they are mapped to plain names.
+
+Eight `spy_created` records landing on one turn is not the poller
+repeating itself. The Renaissance is the only era with
+`SpiesGrantedForEveryone` set, so the first civ to reach it hands a spy
+to everybody at once; every later era grants one only to whoever entered
+it (`CvTeam.cpp:7669-7695`).
+
+No era gate is needed to keep this cheap. Before the Renaissance
+`m_aSpyList` is empty and `GetEspionageSpies` returns without doing
+anything, which is less work per turn than the diplomacy poller does
+from turn one.
