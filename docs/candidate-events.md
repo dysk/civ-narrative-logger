@@ -200,21 +200,22 @@ mirror. Diff turn to turn into `trade_route_established` /
 `trade_route_ended`. Today the log has one `trade_route_plundered`
 event and no idea what was plundered or who lost it.
 
-### City-state relations - the roster half implemented
+### City-state relations - implemented but for the quests
 
-The static half landed as `civ.cityStateRoster()`, carried by
-`session_started`: trait, Lekmod personality, unique unit and plot. See
-`implemented-changes.md`, "Name what each city-state is before anyone
-allies with it". What follows is the per-turn half, still owed.
+The roster landed as `civ.cityStateRoster()` (trait, Lekmod
+personality, unique unit, plot) and the standing state as
+`src/city_states.lua` (ally, influence and its rate, friendship level,
+pledges to protect). See `implemented-changes.md`, "Name what each
+city-state is before anyone allies with it" and "Say how each
+city-state is held, not only when it changes hands".
 
-Hooks cover the transitions (`SetAlly`, `MinorFriendsChanged`,
-`MinorAlliesChanged`) but not the standing state or its causes:
-`GetAlly()`, `GetMinorCivFriendshipWithMajor()`,
-`GetMinorCivFriendshipLevelWithMajor()`, `IsProtectedByMajor()`,
-`GetMinorCivTrait()`, and the quests —
-`IsMinorCivActiveQuestForPlayer(player, questType)` with
-`GetQuestData1/2` and `GetQuestTurnsRemaining`. Who is being asked for
-what, and who delivered, explains most city-state swings.
+What remains are the quests: `IsMinorCivActiveQuestForPlayer(player,
+questType)` with `GetQuestData1/2` and `GetQuestTurnsRemaining`. Who is
+being asked for what, and who delivered, explains most city-state
+swings. The obstacle is not the reading but the iteration:
+`MinorCivQuestTypes` is a C++ enum (`CvMinorCivAI.h:50-71`) with no
+database table behind it, so the eighteen types would have to be
+hardcoded and re-checked against every Lekmod release.
 
 ### Espionage
 
