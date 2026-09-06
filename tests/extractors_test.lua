@@ -67,6 +67,22 @@ local civ = {
   cityOwnerAt = function(x, y)
     return (x == 10 and y == 20) and "Poland" or nil
   end,
+  proposalType = function(proposalId)
+    return ({ [2] = 2, [5] = 0, [9] = 9 })[proposalId] or -1
+  end,
+  proposalVotes = function(proposalId)
+    if proposalId ~= 2 then return nil end
+    return {
+      yes_votes = 2,
+      no_votes = 1,
+      max_votes = 3,
+      voters = {
+        { civ = "Poland", voted = true, vote = true },
+        { civ = "Rome", voted = true, vote = false },
+        { civ = "Carthage", voted = false },
+      },
+    }
+  end,
 }
 
 -- DLL: CityCaptureComplete(oldOwner, isCapital, x, y, newOwner,
@@ -624,20 +640,29 @@ t.test("UiDiploEvent becomes a diplo_event record", function()
   }, extractors.UiDiploEvent(civ, 5, 1, 3, 0))
 end)
 
+-- LEKMOD's own multiplayer voting system, not the World Congress: the
+-- human players propose irrelevance, concede, scrap or a remap and vote
+-- on it (CvVotingClasses.h:1446).
+--
 -- DLL: MPVotingSystemVote(proposalId, voterPlayerId, bVote)
-t.test("MPVotingSystemVote becomes an mp_vote record", function()
+--   -- pushes no proposal type, so the vote is read back out of the game
+t.test("MPVotingSystemVote becomes an mp_vote record saying what was voted on", function()
   t.assert_deep_equal({
     event = "mp_vote",
     turn = 142,
     proposal = 2,
+    proposal_type = "scrap",
     civ = "Poland",
     vote = true,
   }, extractors.MPVotingSystemVote(civ, 2, 0, true))
 end)
 
+t.test("MPVotingSystemVote keeps a proposal type the DLL never defined as its id", function()
+  t.assert_equal(9, extractors.MPVotingSystemVote(civ, 9, 0, false).proposal_type)
+end)
+
 -- DLL: MPVotingSystemProposalResult(proposalId, expirationCounter,
 --   ownerPlayerId, subjectPlayerId, typeId, statusId)
---   -- type/status enums are DLL-internal, kept raw
 t.test("MPVotingSystemProposalResult becomes an mp_proposal_result record", function()
   t.assert_deep_equal({
     event = "mp_proposal_result",
@@ -646,21 +671,69 @@ t.test("MPVotingSystemProposalResult becomes an mp_proposal_result record", func
     expires_in = 0,
     owner = "Poland",
     subject = "Rome",
-    type = 1,
-    status = 2,
-  }, extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 1, 2))
+    type = "irrelevance",
+    status = "passed",
+    yes_votes = 2,
+    no_votes = 1,
+    max_votes = 3,
+    voters = {
+      { civ = "Poland", voted = true, vote = true },
+      { civ = "Rome", voted = true, vote = false },
+      { civ = "Carthage", voted = false },
+    },
+  }, extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 0, 1))
+end)
+
+local function resultTypeName(typeId)
+  return extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, typeId, 1).type
+end
+
+t.test("MPVotingSystemProposalResult names every proposal type the DLL defines", function()
+  t.assert_deep_equal(
+    { "irrelevance", "concede", "scrap", "remap" },
+    { resultTypeName(0), resultTypeName(1), resultTypeName(2), resultTypeName(3) })
+end)
+
+local function resultStatusName(statusId)
+  return extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 0, statusId).status
+end
+
+-- The hook only fires on a finished proposal, so ACTIVE cannot reach it;
+-- the mapping stays total anyway (CvVotingClasses.cpp:12784).
+t.test("MPVotingSystemProposalResult names every outcome the DLL can report", function()
+  t.assert_deep_equal(
+    { "invalid", "active", "passed", "failed" },
+    { resultStatusName(-1), resultStatusName(0), resultStatusName(1), resultStatusName(2) })
+end)
+
+t.test("MPVotingSystemProposalResult keeps a type or status the DLL never defined as its id", function()
+  local record = extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 9, 8)
+  t.assert_deep_equal({ 9, 8 }, { record.type, record.status })
 end)
 
 t.test("MPVotingSystemProposalResult omits a missing subject", function()
+  t.assert_nil(extractors.MPVotingSystemProposalResult(civ, 2, 3, 0, -1, 2, 2).subject)
+end)
+
+-- The tally is the point of reading the proposal back: the hook never
+-- fires for the owner's automatic yes (CvVotingClasses.cpp:12457) nor for
+-- the noes filled in when a proposal expires (:12432), so counting the
+-- mp_vote records would undercount every proposal.
+t.test("MPVotingSystemProposalResult counts the votes the vote hook never announced", function()
+  local record = extractors.MPVotingSystemProposalResult(civ, 2, 0, 0, 1, 0, 1)
+  t.assert_deep_equal({ 2, 1, 3 }, { record.yes_votes, record.no_votes, record.max_votes })
+end)
+
+t.test("MPVotingSystemProposalResult still records a result with no tally to read", function()
   t.assert_deep_equal({
     event = "mp_proposal_result",
     turn = 142,
-    proposal = 2,
-    expires_in = 3,
+    proposal = 7,
+    expires_in = -1,
     owner = "Poland",
-    type = 0,
-    status = 1,
-  }, extractors.MPVotingSystemProposalResult(civ, 2, 3, 0, -1, 0, 1))
+    type = "scrap",
+    status = "failed",
+  }, extractors.MPVotingSystemProposalResult(civ, 7, -1, 0, -1, 2, 2))
 end)
 
 -- DLL: CityBoughtPlot(ownerId, cityId, x, y, bGold, bCulture)

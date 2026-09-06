@@ -1160,6 +1160,43 @@ function M.new(g)
     }
   end
 
+  -- LEKMOD's own multiplayer voting system. Its enums are handed on raw:
+  -- the extractors name them, so both hooks name them the same way.
+  function civ.proposalType(proposalId)
+    return g.Game.GetProposalType(proposalId)
+  end
+
+  -- The vote hook announces only the votes a player casts: the owner's
+  -- automatic yes and the noes filled in when a proposal expires never
+  -- reach it, so a tally has to be read off the proposal itself.
+  -- Unknown ids stop here, because GetNoVotes dereferences the proposal
+  -- without a null check (CvVotingClasses.cpp:12236).
+  function civ.proposalVotes(proposalId)
+    if civ.proposalType(proposalId) < 0 then return nil end
+
+    local voters = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if g.Game.GetProposalVoterEligibility(proposalId, i) then
+        local voter = {
+          civ = civ.civName(i),
+          voted = g.Game.GetProposalVoterHasVoted(proposalId, i),
+        }
+        -- An unvoted slot is stored as false, which reads like a no.
+        if voter.voted then
+          voter.vote = g.Game.GetProposalVoterVote(proposalId, i)
+        end
+        table.insert(voters, voter)
+      end
+    end
+
+    return {
+      yes_votes = g.Game.GetYesVotes(proposalId),
+      no_votes = g.Game.GetNoVotes(proposalId),
+      max_votes = g.Game.GetMaxVotes(proposalId),
+      voters = voters,
+    }
+  end
+
   return civ
 end
 
@@ -1579,11 +1616,35 @@ function M.UiDiploEvent(civ, eventTypeId, aiPlayerId, arg1, arg2)
   }
 end
 
+-- LEKMOD's multiplayer voting system enums (CvVotingClasses.h:1446).
+local PROPOSAL_TYPES = {
+  [0] = "irrelevance",
+  [1] = "concede",
+  [2] = "scrap",
+  [3] = "remap",
+}
+
+local PROPOSAL_STATUSES = {
+  [-1] = "invalid",
+  [0] = "active",
+  [1] = "passed",
+  [2] = "failed",
+}
+
+-- An id the DLL never defined stays the number it is: unnamed loses
+-- nothing, dropped loses the fact that a proposal was voted on at all.
+local function nameOf(names, id)
+  return names[id] or id
+end
+
+-- The hook pushes no type, so what the vote was about is read back out
+-- of the game.
 function M.MPVotingSystemVote(civ, proposalId, voterId, vote)
   return {
     event = "mp_vote",
     turn = civ.turn(),
     proposal = proposalId,
+    proposal_type = nameOf(PROPOSAL_TYPES, civ.proposalType(proposalId)),
     civ = civ.civName(voterId),
     vote = vote,
   }
@@ -1591,16 +1652,23 @@ end
 
 function M.MPVotingSystemProposalResult(civ, proposalId, expiration,
     ownerId, subjectId, typeId, statusId)
-  return {
+  local record = {
     event = "mp_proposal_result",
     turn = civ.turn(),
     proposal = proposalId,
     expires_in = expiration,
     owner = civNameIfAny(civ, ownerId),
     subject = civNameIfAny(civ, subjectId),
-    type = typeId,
-    status = statusId,
+    type = nameOf(PROPOSAL_TYPES, typeId),
+    status = nameOf(PROPOSAL_STATUSES, statusId),
   }
+
+  -- Counting mp_vote records would undercount: the tally the game holds
+  -- includes the votes the vote hook never announced.
+  for field, value in pairs(civ.proposalVotes(proposalId) or {}) do
+    record[field] = value
+  end
+  return record
 end
 
 function M.CityBoughtPlot(civ, ownerId, cityId, x, y, gold, culture)

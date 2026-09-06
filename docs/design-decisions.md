@@ -377,3 +377,40 @@ written in front of the payload's own keys: the parser has no JSON
 decoder, and the stamp is a fact about the log line rather than about
 the game. The raw text goes through unconverted, since a float
 round-trip only risks losing digits it cannot gain.
+
+## The MP voting system is enriched at the hook, not polled
+
+Lekmod's own voting system - irrelevance, concede, scrap and remap
+proposals among the human players, `CvMPVotingSystem`, unrelated to the
+World Congress - pushes two hooks and neither is self-contained.
+`MPVotingSystemVote` names a proposal id, a voter and a yes/no, but not
+what the proposal is. `MPVotingSystemProposalResult` names type, owner,
+subject and outcome, but the votes behind them cannot be recovered from
+the vote records: the owner's automatic yes is written straight into the
+proposal at creation (`CvVotingClasses.cpp:12457`) and, when a proposal
+expires, every missing vote is filled in as a no (`:12432`) - both
+without the hook firing. Counting `mp_vote` records would report a
+tally no player ever saw.
+
+Nothing about that needs a poller. Proposals are only cleared on `Init`
+and on load (`:12077`), so a proposal stays readable for the rest of the
+game, and the DLL exposes the whole of it to Lua (`CvLuaGame.cpp:400`):
+type, status, owner, subject, per-player eligibility, per-player vote,
+and the counts. Both extractors read what their hook left out at the
+moment it fires - `civ.proposalType` for the vote, `civ.proposalVotes`
+for the result - so a per-turn poll would pay for the same facts on
+every turn that has no proposal at all.
+
+The one thing this cannot see is a proposal created and never resolved,
+which needs the log to end mid-flight: the expiration counter starts at
+2 and drops every turn (`:12380`), so a proposal resolves within about
+three turns and the result hook always fires. The turn it was raised is
+`turn - (2 - expires_in)`.
+
+Two smaller choices follow. The DLL's enums are named in
+`src/extractors.lua` rather than in the adapter, so both hooks read the
+same table, and an id the DLL never defined is kept as its number - a
+record that says `type = 9` still says a proposal was voted on. And a
+voter who has not voted carries no `vote` field at all, because the
+proposal stores an unvoted slot as `false`, which is exactly how it
+stores a no.

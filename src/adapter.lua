@@ -1104,6 +1104,43 @@ function M.new(g)
     }
   end
 
+  -- LEKMOD's own multiplayer voting system. Its enums are handed on raw:
+  -- the extractors name them, so both hooks name them the same way.
+  function civ.proposalType(proposalId)
+    return g.Game.GetProposalType(proposalId)
+  end
+
+  -- The vote hook announces only the votes a player casts: the owner's
+  -- automatic yes and the noes filled in when a proposal expires never
+  -- reach it, so a tally has to be read off the proposal itself.
+  -- Unknown ids stop here, because GetNoVotes dereferences the proposal
+  -- without a null check (CvVotingClasses.cpp:12236).
+  function civ.proposalVotes(proposalId)
+    if civ.proposalType(proposalId) < 0 then return nil end
+
+    local voters = {}
+    for i = 0, g.GameDefines.MAX_CIV_PLAYERS - 1 do
+      if g.Game.GetProposalVoterEligibility(proposalId, i) then
+        local voter = {
+          civ = civ.civName(i),
+          voted = g.Game.GetProposalVoterHasVoted(proposalId, i),
+        }
+        -- An unvoted slot is stored as false, which reads like a no.
+        if voter.voted then
+          voter.vote = g.Game.GetProposalVoterVote(proposalId, i)
+        end
+        table.insert(voters, voter)
+      end
+    end
+
+    return {
+      yes_votes = g.Game.GetYesVotes(proposalId),
+      no_votes = g.Game.GetNoVotes(proposalId),
+      max_votes = g.Game.GetMaxVotes(proposalId),
+      voters = voters,
+    }
+  end
+
   return civ
 end
 

@@ -410,11 +410,35 @@ function M.UiDiploEvent(civ, eventTypeId, aiPlayerId, arg1, arg2)
   }
 end
 
+-- LEKMOD's multiplayer voting system enums (CvVotingClasses.h:1446).
+local PROPOSAL_TYPES = {
+  [0] = "irrelevance",
+  [1] = "concede",
+  [2] = "scrap",
+  [3] = "remap",
+}
+
+local PROPOSAL_STATUSES = {
+  [-1] = "invalid",
+  [0] = "active",
+  [1] = "passed",
+  [2] = "failed",
+}
+
+-- An id the DLL never defined stays the number it is: unnamed loses
+-- nothing, dropped loses the fact that a proposal was voted on at all.
+local function nameOf(names, id)
+  return names[id] or id
+end
+
+-- The hook pushes no type, so what the vote was about is read back out
+-- of the game.
 function M.MPVotingSystemVote(civ, proposalId, voterId, vote)
   return {
     event = "mp_vote",
     turn = civ.turn(),
     proposal = proposalId,
+    proposal_type = nameOf(PROPOSAL_TYPES, civ.proposalType(proposalId)),
     civ = civ.civName(voterId),
     vote = vote,
   }
@@ -422,16 +446,23 @@ end
 
 function M.MPVotingSystemProposalResult(civ, proposalId, expiration,
     ownerId, subjectId, typeId, statusId)
-  return {
+  local record = {
     event = "mp_proposal_result",
     turn = civ.turn(),
     proposal = proposalId,
     expires_in = expiration,
     owner = civNameIfAny(civ, ownerId),
     subject = civNameIfAny(civ, subjectId),
-    type = typeId,
-    status = statusId,
+    type = nameOf(PROPOSAL_TYPES, typeId),
+    status = nameOf(PROPOSAL_STATUSES, statusId),
   }
+
+  -- Counting mp_vote records would undercount: the tally the game holds
+  -- includes the votes the vote hook never announced.
+  for field, value in pairs(civ.proposalVotes(proposalId) or {}) do
+    record[field] = value
+  end
+  return record
 end
 
 function M.CityBoughtPlot(civ, ownerId, cityId, x, y, gold, culture)

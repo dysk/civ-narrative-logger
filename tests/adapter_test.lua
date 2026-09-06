@@ -1500,3 +1500,93 @@ end)
 t.test("spies says whose city a spy is sitting in", function()
   t.assert_equal("Rome", spyCiv.spies()["0:0"].city_civ)
 end)
+
+-- LEKMOD's multiplayer voting system, read back through Game (the methods
+-- registered at CvLuaGame.cpp:400). The adapter hands the DLL's enums on
+-- raw - naming them is the extractors' job, and doing it in one place.
+local votingProposals = {
+  [2] = {
+    type = 2,
+    yesVotes = 1, noVotes = 1, maxVotes = 3,
+    eligible = { [0] = true, [1] = true, [2] = true },
+    hasVoted = { [0] = true, [1] = true },
+    vote = { [0] = true, [1] = false },
+  },
+  [3] = {
+    type = 0,
+    yesVotes = 2, noVotes = 0, maxVotes = 2,
+    eligible = { [0] = true, [2] = true },
+    hasVoted = { [0] = true, [2] = true },
+    vote = { [0] = true, [2] = true },
+  },
+}
+
+-- GetNoVotes and GetMaxVotes dereference the proposal without a null
+-- check (CvVotingClasses.cpp:12236), so an unknown id is a crash, not a
+-- zero. The fake indexes just as blindly.
+local votingGlobals = {
+  Game = {
+    GetProposalType = function(proposalId)
+      local proposal = votingProposals[proposalId]
+      return proposal and proposal.type or -1
+    end,
+    GetYesVotes = function(proposalId) return votingProposals[proposalId].yesVotes end,
+    GetNoVotes = function(proposalId) return votingProposals[proposalId].noVotes end,
+    GetMaxVotes = function(proposalId) return votingProposals[proposalId].maxVotes end,
+    GetProposalVoterEligibility = function(proposalId, playerId)
+      return votingProposals[proposalId].eligible[playerId] == true
+    end,
+    GetProposalVoterHasVoted = function(proposalId, playerId)
+      return votingProposals[proposalId].hasVoted[playerId] == true
+    end,
+    GetProposalVoterVote = function(proposalId, playerId)
+      return votingProposals[proposalId].vote[playerId] == true
+    end,
+  },
+  GameDefines = { MAX_CIV_PLAYERS = 3 },
+  Players = {
+    [0] = fakePlayer({ civ = "Poland", human = true }),
+    [1] = fakePlayer({ civ = "Rome", human = true }),
+    [2] = fakePlayer({ civ = "Carthage", human = true }),
+  },
+}
+local votingCiv = adapter.new(votingGlobals)
+
+t.test("proposalType hands back the DLL's proposal enum", function()
+  t.assert_equal(2, votingCiv.proposalType(2))
+end)
+
+t.test("proposalType is NO_PROPOSAL for an id the game does not know", function()
+  t.assert_equal(-1, votingCiv.proposalType(404))
+end)
+
+t.test("proposalVotes counts the votes and names every eligible voter", function()
+  t.assert_deep_equal({
+    yes_votes = 1,
+    no_votes = 1,
+    max_votes = 3,
+    voters = {
+      { civ = "Poland", voted = true, vote = true },
+      { civ = "Rome", voted = true, vote = false },
+      { civ = "Carthage", voted = false },
+    },
+  }, votingCiv.proposalVotes(2))
+end)
+
+-- The DLL stores an unvoted slot as false, which reads exactly like a no.
+t.test("proposalVotes leaves a voter who never voted without a vote", function()
+  t.assert_nil(votingCiv.proposalVotes(2).voters[3].vote)
+end)
+
+-- The subject of an irrelevance or concede proposal cannot vote on it,
+-- and neither can a dead or AI player (CvVotingClasses.cpp:12459).
+t.test("proposalVotes leaves out a player the proposal never made eligible", function()
+  t.assert_deep_equal({
+    { civ = "Poland", voted = true, vote = true },
+    { civ = "Carthage", voted = true, vote = true },
+  }, votingCiv.proposalVotes(3).voters)
+end)
+
+t.test("proposalVotes is nil for a proposal the game does not know", function()
+  t.assert_nil(votingCiv.proposalVotes(404))
+end)
