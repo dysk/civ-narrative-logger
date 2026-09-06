@@ -119,8 +119,7 @@ The raw log includes every city-state and barbarian, and `unit_lost`
 fires on *any* unit removal - combat death, a spent great person, a
 settler founding a city, a captured city's garrison, a caravan
 finishing its route - with no indication of which. Two tools clean
-this up before you hand the log to an LLM or a strategy-analysis
-tool:
+this up before you hand the log to an LLM:
 
 ```sh
 tools/pipeline.sh events.jsonl --out prepared.jsonl
@@ -141,6 +140,14 @@ This runs, in order:
    Runs after step 1 on purpose: a city-state's unit `killed_by` (or
    `killer:`) a major nation only becomes visible to the filter once
    reconciliation has filled that field in.
+
+Both stages are lossy on purpose, so this is prep for a context
+window, not a canonical form of the log. Keep the raw `events.jsonl`.
+`civ-strategy-analyst` in particular wants the raw file and not this
+one: it imports to a database rather than to a prompt, it reads
+`killed_by` rather than `cause`, and step 2 would take the
+city-states' and barbarians' unit events away from it. Its README
+says why at more length.
 
 Each stage is also a standalone tool if you want to inspect or rerun
 just one of them (`tools/reconcile-unit-lost.jq` needs `jq -s -f`;
