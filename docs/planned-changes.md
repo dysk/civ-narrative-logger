@@ -168,6 +168,48 @@ The same one-word class of fix applies to `spy_created`, which carries
 no location either (0 of 18). A spy first seen already posted loses that
 posting permanently, whatever happens to defect 2.
 
+**4. `spy_mission_completed` fires on missions that never happened, and
+they outnumber the real ones.** `completed()` reads a fall in
+`PercentComplete` as a finished mission. But progress also resets at a
+**state transition**: `GetPercentOfStateComplete` computes
+`amount * 100 / goal` for `TRAVELLING`, `SURVEILLANCE` and
+`GATHERING_INTEL` alike (`CvEspionageClasses.cpp:2474-2487`), and each
+new state starts that counter at zero. So surveillance completing and
+intel-gathering beginning reads as a completed mission.
+
+The arithmetic dates it exactly. `iSpyTurnsToTravel = 1` (`:23`) and
+`GetInfluenceSurveillanceTime` returns **3**, or **1** when the spy's
+owner is at `INFLUENCE_LEVEL_FAMILIAR` or better over the target
+(`CvCultureClasses.cpp:2919`). So the false completion lands **4 turns
+after the posting**, or 2 with a tourism lead — and in india-diplo the
+first "completed mission" after a posting lands at **+3 or +4 in 14 of
+18 postings**, while genuine repeats in the same city run 9 to 37 turns
+apart for a tech steal and exactly 10 for a rigged election.
+
+Anchoring every completion against the nearest preceding `spy_created`
+or `spy_moved`:
+
+| | count |
+|---|---|
+| state-transition artifacts | **23** |
+| genuine completions | 21 |
+| unclassifiable — no anchor survived defect 2 | 9 |
+
+**23 of 53.** The damage is uneven and worst where volume is lowest:
+India's 23 rigged elections survive as 18 real ones, because elections
+land on a fixed ten-turn cycle that corroborates them, while England's
+ten tech thefts reduce to two that can be confirmed, and the Netherlands,
+Tibet and the Iroquois to none. The analyst's headline finding for this
+feature is the per-civ mission split, and that split is currently mostly
+artifact.
+
+Rigging is damaged less for a readable reason: for `SPY_STATE_RIG_ELECTION`
+progress comes from the global election clock
+(`GetTurnsBetweenMinorCivElections`), not from the city's counter, so the
+transition does not always produce a fall. The defect's footprint follows
+the progress formula exactly, which is the strongest evidence that this
+reading is right.
+
 ### Approach
 
 Defects 1 and 3 are cheap and independent of the hard one:
@@ -181,6 +223,22 @@ Defects 1 and 3 are cheap and independent of the hard one:
   and `spy.state` differ and a city is present, not only on a coordinate
   change — a state transition into `counter_intel` is a posting even
   when the coordinates were already right.
+
+Defect 4 is the one worth fixing first, because it corrupts a number the
+analyst publishes. A fall in progress is only a completion when the
+**state is unchanged**; `completed()` should require
+`known.state == spy.state` alongside the fall. That is one clause, and it
+turns the false positives into nothing rather than into a new event.
+
+**And the transition it currently mislabels is worth logging on purpose.**
+`spyRecord` already extracts `surveillance = row.EstablishedSurveillance`
+(`src/adapter.lua:927`) from `HasEstablishedSurveillance`, and **no event
+carries it** — neither `posting()` nor `completion()` mentions it. The
+turn a spy's surveillance goes false → true is the turn its owner can
+first see the city, which is exactly what the analyst is otherwise forced
+to reconstruct from the DLL's constants. One event per posting, about 39
+for a whole game. It is the cheapest record in this document and it
+answers a question nothing else can.
 
 Defect 2 wants the instrumentation above first. If the extraction poll
 is the cause, `moved()` should compare against the last *positioned*
@@ -207,6 +265,14 @@ and one that dies in place must produce a located `spy_killed`. A
 counterspy fake — a spy in its owner's own city, `PercentComplete` at
 `-1` for the whole posting — pins that it emits its posting and then
 stays quiet, which is correct behaviour rather than silence.
+
+Defect 4 has a fake that is barely more than a table: a spy whose state
+walks `travelling → surveillance → gathering_intel` with progress
+restarting at each step must produce **one** surveillance event and **no**
+completion, and the same walk with the state held still and progress
+falling must produce a completion. The regression to guard is the count,
+not the shape — 53 logged completions in india-diplo should become about
+30.
 
 What the fakes cannot settle is defect 2, which needs one replayed save
 with a spy reassigned between two cities and the per-poll `CityX`
