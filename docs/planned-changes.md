@@ -70,3 +70,144 @@ The fakes can drive both halves: a poll sequence interrupted by a fresh
 `congress.new` over the same fake league is exactly the reload. What
 they cannot check is whether a real reload resumes where the last poll
 left off, so the seam's real width wants one replayed save.
+
+## Let a counterspy leave a trace
+
+### The problem
+
+A spy posted to one of its owner's own cities runs counter-intelligence,
+and `examples/india-diplo.jsonl` in the analyst repo contains **not one
+record of one**. India garrisoned Delhi for the whole game and the log
+says nothing about it.
+
+That garrison is not a guess. `CvEspionageClasses.cpp:538-582` (under
+`ESPIONAGE_SYSTEM_REWORK`, defined at `_Defines.h:1441`) resolves every
+completed mission on a rank difference, and the two branches differ in
+what they can produce:
+
+```
+with a counterspy:      >2 DETECTED   2|1 IDENTIFIED   0 SPOTTED   <0 KILLED
+without a counterspy:   >3 UNDETECTED   3 DETECTED     2 IDENTIFIED
+```
+
+There is no `KILLED` branch without a counterspy. **Nine spies died in
+Delhi** — England lost four there, Tibet three, the Netherlands and the
+Iroquois one each — so a counterspy was sitting in Delhi. It is even
+nameable: India created six spies, five of them appear in some city, and
+the sixth is
+
+```
+{"civ":"India","event":"spy_created","spy":"TXT_KEY_SPY_NAME_INDIA_7","turn":94}
+{"civ":"India","event":"spy_promoted","rank":"agent","spy":"...INDIA_7","turn":108}
+{"civ":"India","event":"spy_promoted","rank":"special_agent","spy":"...INDIA_7","turn":109}
+```
+
+Three records in 90 turns, no city, ever. The promotions date it: the
+DLL sets `bCounterSpyUpgrade` on `SPOTTED` and `KILLED` — the defender
+is what levels up — and the first kill in the game is on turn 109.
+
+From the UI there is nothing special about this posting: sending a spy
+home is the same gesture as sending it to a rival or a city-state. The
+data is there too — `CvLuaPlayer.cpp:11552` returns `CityX`/`CityY`
+unconditionally for every spy in `m_aSpyList` and maps
+`SPY_STATE_COUNTER_INTEL` like any other state. The loss is entirely in
+`src/spies.lua`, and it is three separate defects that happen to
+compound.
+
+**1. Counter-intelligence can only ever produce one event, and it is the
+one most often missed.** `GetPercentOfStateComplete` returns `-1` for
+`SPY_STATE_COUNTER_INTEL` (`CvEspionageClasses.cpp:2503`), so `progress`
+is nil for the whole posting, and `completed()` requires
+`known.progress ~= nil and spy.progress ~= nil`. A counterspy therefore
+never emits `spy_mission_completed` — correctly, it completes nothing —
+which leaves `spy_moved` as the *only* record it can produce for the
+rest of the game. Every other state has a second chance; this one does
+not.
+
+**2. `spy_moved` is missed often, and that is the defect that hurts.**
+Of the 24 spies that ever appear in a city, **11 are first located by a
+`spy_mission_completed`, not by a `spy_moved`** — their posting was
+never written. It is not only initial postings, either:
+
+```
+{"event":"spy_created",           "spy":"...ENGLAND_6","turn":148}
+{"event":"spy_mission_completed", "spy":"...ENGLAND_6","city":"Amsterdam","turn":152}
+{"event":"spy_mission_completed", "spy":"...ENGLAND_6","city":"Osininka", "turn":168}
+```
+
+Amsterdam to Osininka with no `spy_moved` between them, so a
+**re-posting** is lost too. The log carries ten `logger_error` records
+and every one is `PlayerDoTurn (congress)` — the spy poller never
+raised, so this is not a crash swallowing turns.
+
+Two candidate causes worth instrumenting before choosing a fix, because
+they want different fixes:
+
+- `moved()` short-circuits on `spy.x ~= nil`. `MoveSpyTo` calls
+  `ExtractSpyFromCity` before assigning the destination, so a poll can
+  land on a spy with `CityX == -1`. That poll writes no event *and*
+  overwrites `known` with a positionless record.
+- `diffSpy` returns immediately when `known.state == "dead"`, emitting
+  only `spy_revived`. A spy that revives and is posted before the next
+  poll loses the posting outright. England revived three spies and
+  Tibet three.
+
+The instrumentation that settles it is small: log `row.CityX`,
+`row.CityY` and `row.State` per poll for one spy across one
+reassignment.
+
+**3. `spy_killed` throws away a location it is holding.** `diffSpy`
+writes `at(spy)` — the *dead* record — and the DLL calls
+`ExtractSpyFromCity` before setting `SPY_STATE_DEAD`, so `CityX` is
+already `-1`. **0 of 9 kills carry a city.** The previous poll's `known`
+still holds it; `at(known)` is a one-word change that hands the analyst
+the death site directly instead of making it infer one from the last
+tenure, 4 to 13 turns stale.
+
+The same one-word class of fix applies to `spy_created`, which carries
+no location either (0 of 18). A spy first seen already posted loses that
+posting permanently, whatever happens to defect 2.
+
+### Approach
+
+Defects 1 and 3 are cheap and independent of the hard one:
+
+- `spy_created` and `spy_killed` both take `at()` — `at(spies[key])` for
+  the creation, `at(known)` for the death. This alone makes a garrison
+  visible whenever the spy is first polled in place, and gives every
+  kill a city.
+- A counterspy still needs its posting written. If defect 2 proves hard
+  to close, the fallback is to emit a `spy_moved` whenever `known.state`
+  and `spy.state` differ and a city is present, not only on a coordinate
+  change — a state transition into `counter_intel` is a posting even
+  when the coordinates were already right.
+
+Defect 2 wants the instrumentation above first. If the extraction poll
+is the cause, `moved()` should compare against the last *positioned*
+record rather than the immediately previous one; if the revival
+early-return is the cause, `diffSpy` should fall through to the move
+check after emitting `spy_revived`.
+
+Worth doing in the same pass, since it is the other espionage event that
+does not exist: **a coup has no record at all.**
+`CvEspionageClasses.cpp:2110` — a spy in a city-state that already has an
+ally can seize the alliance outright, swapping influence with the
+previous ally on success, and on failure taking the owner's influence to
+`-10` and dying. Neither outcome is a move or a completed mission, so
+the poller writes nothing. A failure is already inside reach: it is a
+spy going to `dead` while posted to a minor, which fix 3 makes
+identifiable on its own. A success needs its own read, and
+`CanStageCoup` plus a city-state ally check is the whole of it.
+
+### Verification
+
+The fakes cover the cheap half: a poll sequence over a spy that is
+already in a city when first seen must produce a located `spy_created`,
+and one that dies in place must produce a located `spy_killed`. A
+counterspy fake — a spy in its owner's own city, `PercentComplete` at
+`-1` for the whole posting — pins that it emits its posting and then
+stays quiet, which is correct behaviour rather than silence.
+
+What the fakes cannot settle is defect 2, which needs one replayed save
+with a spy reassigned between two cities and the per-poll `CityX`
+written out beside the events.
