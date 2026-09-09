@@ -1,0 +1,188 @@
+# Capture protocol
+
+What has to happen in a live game, with the current
+`dist/CivNarrativeLogger.lua` installed, to move the open items in
+`planned-changes.md`. Three runs, each answering a different question.
+Run A validates what already landed and unblocks the analyst; runs B and
+C settle the fixes that are still owed.
+
+The bundle to install is the one at `b51a639` — Defect 3, Defect 4,
+`spy_created` location, `spy_surveillance_established`, the revival
+fall-through and the counterspy `spy_moved` are all in it. Run B needs a
+code change on top; see its step 0.
+
+---
+
+## Run A — full validation playthrough
+
+One normal game, played to a war or a late peace, with espionage used
+deliberately. Every landed fix has a path here that no existing log
+exercises: `india-diplo.jsonl` predates all of them.
+
+### What has to happen in the game
+
+Play these into one game in roughly this order. Turn numbers are
+relative to each posting.
+
+1. **First spy.** Reach the tech that grants it, or build the wonder.
+   Note the turn — this is the first `spy_created`. If the spy is
+   granted while you already hold a city it could sit in, so much the
+   better: it may be first polled already posted.
+
+2. **Post spy 1 to a rival capital.** The turn you issue the order,
+   then end it. Expect, across the next four polls:
+   - `spy_moved` with the posting on the arrival turn,
+   - `spy_surveillance_established` carrying that city 1–3 turns later
+     (1 turn if you have Familiar+ influence over the target, else 3),
+   - **no `spy_mission_completed`** in that window. The spy walks
+     `travelling → surveillance → gathering_intel` and the progress
+     counter restarts at each step; the Defect 4 fix has to hold here,
+     in the wild — one surveillance event, zero false completions.
+
+3. **Let spy 1 finish a real mission.** Steal a tech or gather intel to
+   completion. Expect one `spy_mission_completed` with the city, at a
+   point where the state did not change and progress genuinely fell.
+
+4. **Post spy 2 to a city-state and rig its elections.** Same
+   surveillance event on arrival. Then leave it there through **two**
+   election cycles (~10 turns each) to get two genuine repeat
+   `spy_mission_completed` records in one city — the pattern that has to
+   stay distinguishable from a state-transition artifact.
+
+5. **Make a counterspy.** Post spy 3 to one of *your own* cities.
+   Expect **exactly one** `spy_moved` — the `counter_intel` transition
+   with the city present — and then **silence for the rest of the
+   game**: no surveillance event, no completion. Leave it in place 15+
+   turns to prove "fires once".
+
+6. **Get one of your spies killed while posted.** The controllable
+   route: stage a coup in a city-state that already has an ally, with
+   enough influence to have the option, and lose the roll. Save first
+   and retry until it fails. Expect `spy_killed` **carrying the
+   city-state name** — read from the last live poll, since the dead
+   record is emptied.
+
+7. **Revive and re-post that spy.** Wait out the revival cooldown —
+   expect `spy_revived`. Then post the revived spy to a city on the
+   same or the next turn. Expect `spy_revived` followed by the
+   `spy_moved` posting, read from the spy alone. If the spy is shown
+   back in your capital the moment it revives, the fall-through should
+   already emit that posting without a move order.
+
+8. **Promotions** need no action — note that `spy_promoted` records
+   appear for spies that survive missions.
+
+### Save / reload point
+
+This run doubles as the session-seam test. Pick a turn where **spy 4 is
+mid-travel to a new posting** — order issued turn S, arrival S+1:
+
+1. On turn S, issue the move order. Do **not** end the turn.
+2. Quit to the main menu. Reload the save.
+3. End turn S. Advance to S+3.
+
+After the reload, check:
+
+- Does `spy_moved` for spy 4's posting appear at all, or does the spy
+  just turn up with surveillance already established, the posting having
+  fallen in the seam (the first poll of a session only sets a baseline)?
+- Every spy already posted at reload should produce a **located**
+  `spy_created` on the first post-reload poll. Confirm the city is
+  populated — that is the `spy_created` location fix, and it is also the
+  shape the seam produces for a posting made just before it.
+
+### After the run
+
+- Import the log into the analyst. The event-reading paths in the
+  `Espionage` projection (once built) finally have real input:
+  `spy_surveillance_established`, located `spy_created` / `spy_killed`,
+  `spy_moved` after a revival, `spy_moved` on `counter_intel`.
+- Sanity-check the completion count against the old ratio: india-diplo
+  logged 53 completions where ~30 were real. A comparable game should
+  now log close to the real number.
+- Whatever the reload seam swallowed becomes the concrete case for the
+  "Sessions" item in `planned-changes.md`.
+
+---
+
+## Run B — instrumented spy reassignment
+
+Settles Defect 2's extraction-poll half: a `spy_moved` lost mid
+`MoveSpyTo` when a poll lands on a spy with `CityX == -1`. The fakes
+cannot reach this; it needs per-poll DLL values from a real move.
+
+### Step 0 — instrument first (code change, then rebuild)
+
+In `src/spies.lua`, at the point each poll reads a spy record, emit one
+debug line per spy per poll with `turn`, `row.State`, `row.CityX`,
+`row.CityY` and `row.PercentComplete`. A `logger_debug` record or a
+side file is fine — it only has to survive one game. Rebuild
+`dist/CivNarrativeLogger.lua` with `luajit tools/build.lua` and install
+that.
+
+### The game
+
+1. Play to a single spy. Post it to city X. Let surveillance establish
+   and the spy settle into `gathering_intel`.
+2. **Save** — call it save-R.
+3. Issue a move order to city Y. End the turn. Advance 3–4 turns, one
+   poll each.
+4. Reload save-R. Issue the **same** order. Advance again. Two identical
+   runs rule out a one-off.
+
+### What to read out
+
+In the instrumented lines, find the poll(s) where `CityX == -1` — the
+spy extracted from X but not yet assigned to Y. Then check:
+
+- Does that poll emit **no** `spy_moved` (expected — `moved()`
+  short-circuits on `spy.x ~= nil`)?
+- Does the **arrival at Y** also emit no `spy_moved`, because `known`
+  was overwritten with the positionless record and `moved()` now
+  compares Y against nil?
+
+If both hold, the fix is to have `moved()` compare against the last
+*positioned* `known`, not the immediately previous one. If the arrival
+at Y *does* emit `spy_moved`, the extraction poll is harmless and the
+lost postings in india-diplo were all the revival early-return, which is
+already fixed — in which case this item closes with no further change.
+
+---
+
+## Run C — congress reload seam
+
+Settles the `WORLD_RELIGION` question in `planned-changes.md`: does a
+resolution that concludes across a session boundary lose its outcome, or
+only its founding announcement?
+
+Can be folded into Run A's game if a League is active there; otherwise a
+short dedicated game with the World Congress founded.
+
+### The game
+
+1. With a Congress active, get a resolution **proposed on turn P** —
+   propose it yourself, or note an AI proposal once it shows in
+   `congress_snapshot`.
+2. Play so the session's **last poll is on turn P** (or later, but
+   before the vote resolves). **Save.**
+3. Quit to the menu. Reload on turn **P + k**, where k is far enough
+   that the vote has already been decided.
+4. Advance a few turns.
+
+### What to check
+
+- Is the resolution's outcome event present in the log, or did it vanish
+  — the diff for turns P+1..P+k never ran because the first poll of the
+  new session only rebaselined?
+- Count `congress_founded` records: one per `session_started`? Every one
+  after the first is false.
+
+### After
+
+- If the outcome vanished: the hard half of the congress fix is real —
+  `congress_snapshot` has to carry proposals and resolution states so a
+  resuming session rebuilds its baseline. That is a bigger record and a
+  new read path.
+- If only the founding repeated: drop the `congress_founded` event and
+  let the first `congress_snapshot` mark the league's arrival. The
+  analyst reads `congress_founded` nowhere else.
