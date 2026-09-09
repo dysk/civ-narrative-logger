@@ -2629,6 +2629,16 @@ local function moved(known, spy)
   return spy.x ~= nil and (known.x ~= spy.x or known.y ~= spy.y)
 end
 
+-- A counterspy sits in one of its owner's own cities and its progress is
+-- always nil, so a completed mission can never surface it: spy_moved is
+-- the only event it produces. When it was posted home to coordinates
+-- that did not change, the move check misses it, and the transition into
+-- counter_intel is the posting instead.
+local function becameCounterspy(known, spy)
+  return spy.state == "counter_intel" and known.state ~= "counter_intel"
+    and spy.city ~= nil
+end
+
 -- A finished mission neither moves the spy nor changes its state: the
 -- DLL resets the progress and sets the same activity going again
 -- (CvEspionageClasses.cpp:807-810 for a stolen tech, :900-903 for a
@@ -2644,7 +2654,16 @@ end
 
 local function diffSpy(sink, turn, known, spy)
   if known.state == "dead" then
-    if spy.state ~= "dead" then sink(json.encode(record("spy_revived", turn, spy))) end
+    if spy.state ~= "dead" then
+      sink(json.encode(record("spy_revived", turn, spy)))
+      -- A revived spy is a fresh recruit with no prior position, so any
+      -- city it already sits in is a new posting nothing else would see.
+      -- The dead record it is diffed against carries no rank or progress
+      -- worth trusting, so only the posting is read from it.
+      if spy.x ~= nil then
+        sink(json.encode(record("spy_moved", turn, spy, posting(spy))))
+      end
+    end
     return
   end
   if spy.state == "dead" then
@@ -2656,7 +2675,7 @@ local function diffSpy(sink, turn, known, spy)
   if known.rank ~= spy.rank then
     sink(json.encode(record("spy_promoted", turn, spy, { rank = spy.rank })))
   end
-  if moved(known, spy) then
+  if moved(known, spy) or becameCounterspy(known, spy) then
     sink(json.encode(record("spy_moved", turn, spy, posting(spy))))
   elseif completed(known, spy) then
     sink(json.encode(record("spy_mission_completed", turn, spy, completion(spy))))

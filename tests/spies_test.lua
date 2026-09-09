@@ -99,6 +99,32 @@ t.test("emits spy_moved with the city it was sent to and whose it is", function(
   }))
 end)
 
+-- A counterspy's progress is always nil, so spy_moved is the only event
+-- it can ever produce. When the move that posted it home did not change
+-- the coordinates, the transition into counter_intel is that posting.
+t.test("emits spy_moved when a spy turns to counter-intelligence in place", function()
+  t.assert_deep_equal({
+    '{"city":"Warsaw","city_civ":"Poland","civ":"Poland","event":"spy_moved",'
+      .. '"spy":"Alexis","state":"counter_intel","turn":11,"x":40,"y":3}',
+  }, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ state = "travelling",
+        city = "Warsaw", city_civ = "Poland" }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ state = "counter_intel",
+        city = "Warsaw", city_civ = "Poland" }) } },
+  }))
+end)
+
+-- The transition is the posting only the first time; a counterspy left
+-- in place must not re-announce itself every poll.
+t.test("does not repeat spy_moved while a counterspy sits still", function()
+  t.assert_deep_equal({}, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ state = "counter_intel",
+        city = "Warsaw", city_civ = "Poland" }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ state = "counter_intel",
+        city = "Warsaw", city_civ = "Poland" }) } },
+  }))
+end)
+
 t.test("emits spy_promoted when the rank goes up", function()
   t.assert_deep_equal({
     '{"civ":"Poland","event":"spy_promoted","rank":"agent","spy":"Alexis","turn":11}',
@@ -131,6 +157,22 @@ t.test("emits spy_revived when a dead spy returns under a new name", function()
   }, pollThrough({
     { turn = 10, spies = { ["0:0"] = spy({ state = "dead" }) } },
     { turn = 11, spies = { ["0:0"] = unassignedSpy({ spy = "Claudette" }) } },
+  }))
+end)
+
+-- A spy that revives and is posted before the next poll would otherwise
+-- lose the posting: the dead record it is diffed against carries no
+-- position, so the move check never sees the arrival.
+t.test("emits the posting when a spy revives already in a city", function()
+  t.assert_deep_equal({
+    '{"civ":"Poland","event":"spy_revived","spy":"Claudette","turn":11}',
+    '{"city":"Kyoto","city_civ":"Japan","civ":"Poland","event":"spy_moved",'
+      .. '"spy":"Claudette","state":"travelling","turn":11,"x":5,"y":9}',
+  }, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ state = "dead" }) } },
+    { turn = 11, spies = { ["0:0"] = unassignedSpy({ spy = "Claudette",
+        state = "travelling", city = "Kyoto", city_civ = "Japan",
+        x = 5, y = 9 }) } },
   }))
 end)
 

@@ -291,9 +291,27 @@ Landed in `src/spies.lua`:
   live poll, instead of the emptied dead record.
 - **`spy_created` location.** The creation now carries `at()`, so a spy
   first polled while already posted keeps that posting.
+- **Defect 2, the revival half.** `diffSpy` no longer returns straight
+  after `spy_revived`: if the revived spy already sits in a city it emits
+  the `spy_moved` posting too, read from the spy alone since the dead
+  record it is diffed against carries no position.
+- **The counterspy's one event.** `spy_moved` now also fires on the
+  transition into `counter_intel` with a city present, not only on a
+  coordinate change, so a spy posted home to coordinates that did not
+  move is still recorded. Fires once — a counterspy left in place stays
+  quiet.
 
-Still owed: **defect 2** (`spy_moved` missed on re-postings and after a
-revival), which wants the per-poll `CityX`/`State` instrumentation above
-before a fix is chosen; and **the coup**, which has no record at all —
-a failure is now a spy going `dead` while posted to a minor, a success
-needs its own `CanStageCoup` read.
+Still owed:
+
+- **Defect 2, the extraction-poll half.** A `spy_moved` lost mid-`MoveSpyTo`
+  when a poll lands on `CityX == -1`. Wants the per-poll `CityX`/`CityY`/
+  `State` instrumentation above, from one replayed save with a spy
+  reassigned between two cities, before a fix is chosen.
+- **Sessions.** The first poll of a session is only a baseline, so a
+  posting made across a reload seam is lost the same way `congress.new`
+  loses a diff. Needs `known` to persist between sessions — shared with
+  the other stateful pollers, not spy-specific.
+- **The coup.** No record at all. A failure is a spy going `dead` while
+  posted to a minor, which the analyst can already infer from the located
+  `spy_killed`; a success needs its own `CanStageCoup` read joined to a
+  city-state alliance change.
