@@ -1,14 +1,27 @@
 local t = require("tests.test_helper")
 local spies = require("src.spies")
 
+-- pairs() skips a key whose value is nil, so overrides use NONE to clear
+-- a field the way a freshly granted or just-revived spy has none.
+local NONE = {}
+
 local function spy(overrides)
   local entry = {
     civ = "Poland", spy = "Alexis", rank = "recruit",
     state = "gathering_intel", city = "Antium", city_civ = "Rome",
     x = 40, y = 3, turns_left = 6, progress = 62, surveillance = true,
   }
-  for field, value in pairs(overrides or {}) do entry[field] = value end
+  for field, value in pairs(overrides or {}) do
+    entry[field] = value ~= NONE and value or nil
+  end
   return entry
+end
+
+local function unassignedSpy(overrides)
+  local cleared = { state = "unassigned", city = NONE, city_civ = NONE,
+    x = NONE, y = NONE, turns_left = NONE, progress = NONE, surveillance = NONE }
+  for field, value in pairs(overrides or {}) do cleared[field] = value end
+  return spy(cleared)
 end
 
 local function fakeCiv(state)
@@ -51,9 +64,19 @@ t.test("emits spy_created for a spy that was not there before", function()
     '{"civ":"Poland","event":"spy_created","spy":"Alexis","turn":11}',
   }, pollThrough({
     { turn = 10, spies = {} },
-    { turn = 11, spies = { ["0:0"] = spy({ state = "unassigned", city = nil,
-        city_civ = nil, x = nil, y = nil, turns_left = nil, progress = nil,
-        surveillance = nil }) } },
+    { turn = 11, spies = { ["0:0"] = unassignedSpy() } },
+  }))
+end)
+
+-- A spy first polled while already posted still carries a city, and the
+-- creation is the only record that posting will get.
+t.test("emits spy_created with the city when the spy is first seen posted", function()
+  t.assert_deep_equal({
+    '{"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_created",'
+      .. '"spy":"Alexis","turn":11}',
+  }, pollThrough({
+    { turn = 10, spies = {} },
+    { turn = 11, spies = { ["0:0"] = spy({ city = "Antium", city_civ = "Rome" }) } },
   }))
 end)
 
@@ -85,14 +108,17 @@ t.test("emits spy_promoted when the rank goes up", function()
   }))
 end)
 
-t.test("emits spy_killed when a spy turns up dead", function()
+-- The DLL empties a spy's location before it sets SPY_STATE_DEAD, so the
+-- dead record carries no city. The death site is the city the spy held on
+-- the last live poll.
+t.test("emits spy_killed with the city from the last live poll", function()
   t.assert_deep_equal({
     '{"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_killed",'
       .. '"spy":"Alexis","turn":11}',
   }, pollThrough({
-    { turn = 10, spies = { ["0:0"] = spy() } },
-    { turn = 11, spies = { ["0:0"] = spy({ state = "dead", city = "Antium",
-        city_civ = "Rome" }) } },
+    { turn = 10, spies = { ["0:0"] = spy({ city = "Antium", city_civ = "Rome" }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ state = "dead", city = nil,
+        city_civ = nil }) } },
   }))
 end)
 
@@ -104,9 +130,7 @@ t.test("emits spy_revived when a dead spy returns under a new name", function()
     '{"civ":"Poland","event":"spy_revived","spy":"Claudette","turn":11}',
   }, pollThrough({
     { turn = 10, spies = { ["0:0"] = spy({ state = "dead" }) } },
-    { turn = 11, spies = { ["0:0"] = spy({ state = "unassigned",
-        spy = "Claudette", city = nil, city_civ = nil, x = nil, y = nil,
-        turns_left = nil, progress = nil, surveillance = nil }) } },
+    { turn = 11, spies = { ["0:0"] = unassignedSpy({ spy = "Claudette" }) } },
   }))
 end)
 
@@ -130,6 +154,16 @@ t.test("a rigged election completes the same way an intel theft does", function(
     { turn = 10, spies = { ["0:0"] = spy({ state = "rigging_election", progress = 90 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "rigging_election", progress = 0 }) } },
   })[1])
+end)
+
+-- Travelling, surveillance and gathering intel share one progress
+-- counter and each state starts it at zero, so a state transition drops
+-- progress in place without a mission having finished.
+t.test("progress falling at a state transition is not a completed mission", function()
+  t.assert_deep_equal({}, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ state = "surveillance", progress = 88 }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ state = "gathering_intel", progress = 0 }) } },
+  }))
 end)
 
 t.test("climbing progress is not a completed mission", function()
@@ -175,6 +209,25 @@ t.test("events come out in a deterministic order", function()
     table.insert(seen, line:match('"spy":"(%a+)"'))
   end
   t.assert_deep_equal({ "Alexis", "Lucius" }, seen)
+end)
+
+-- The turn surveillance goes true is the turn the spy's owner can first
+-- see into the city. Nothing else in the log marks it.
+t.test("emits spy_surveillance_established when surveillance goes up in place", function()
+  t.assert_deep_equal({
+    '{"city":"Antium","city_civ":"Rome","civ":"Poland",'
+      .. '"event":"spy_surveillance_established","spy":"Alexis","turn":11}',
+  }, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ surveillance = false }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ surveillance = true }) } },
+  }))
+end)
+
+t.test("surveillance dropping to false is not an event", function()
+  t.assert_deep_equal({}, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ surveillance = true }) } },
+    { turn = 11, spies = { ["0:0"] = spy({ surveillance = false }) } },
+  }))
 end)
 
 t.test("a poll error is logged instead of raised", function()

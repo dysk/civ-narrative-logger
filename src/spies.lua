@@ -7,7 +7,8 @@
 -- city, rigging elections in a city-state, or counter-intelligence at
 -- home. Logging each of those turns would be four fifths of the records
 -- to say what the destination already says, so the posting is written
--- and the cycle is not.
+-- and the cycle is not. The one turn in the cycle worth a record is when
+-- surveillance goes true: from then on the spy's owner can see the city.
 --
 -- The first poll of a session is only a baseline.
 --
@@ -57,9 +58,12 @@ end
 -- DLL resets the progress and sets the same activity going again
 -- (CvEspionageClasses.cpp:807-810 for a stolen tech, :900-903 for a
 -- rigged election). Progress otherwise only climbs, so a fall in place
--- is the completion. A fall that comes with a move is the new posting.
+-- is the completion. A fall that comes with a move is the new posting,
+-- and a fall that comes with a state change is only the shared
+-- travelling/surveillance/gathering-intel counter restarting.
 local function completed(known, spy)
   return known.progress ~= nil and spy.progress ~= nil
+    and known.state == spy.state
     and spy.progress < known.progress
 end
 
@@ -69,7 +73,9 @@ local function diffSpy(sink, turn, known, spy)
     return
   end
   if spy.state == "dead" then
-    sink(json.encode(record("spy_killed", turn, spy, at(spy))))
+    -- The DLL empties the location before setting SPY_STATE_DEAD, so the
+    -- death site is the city the spy held on the last live poll.
+    sink(json.encode(record("spy_killed", turn, spy, at(known))))
     return
   end
   if known.rank ~= spy.rank then
@@ -80,6 +86,9 @@ local function diffSpy(sink, turn, known, spy)
   elseif completed(known, spy) then
     sink(json.encode(record("spy_mission_completed", turn, spy, completion(spy))))
   end
+  if not known.surveillance and spy.surveillance then
+    sink(json.encode(record("spy_surveillance_established", turn, spy, at(spy))))
+  end
 end
 
 local function diff(sink, turn, known, spies)
@@ -87,7 +96,7 @@ local function diff(sink, turn, known, spies)
     if known[key] then
       diffSpy(sink, turn, known[key], spies[key])
     else
-      sink(json.encode(record("spy_created", turn, spies[key])))
+      sink(json.encode(record("spy_created", turn, spies[key], at(spies[key]))))
     end
   end
 end
