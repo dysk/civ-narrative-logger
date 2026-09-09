@@ -277,3 +277,23 @@ not the shape — 53 logged completions in india-diplo should become about
 What the fakes cannot settle is defect 2, which needs one replayed save
 with a spy reassigned between two cities and the per-poll `CityX`
 written out beside the events.
+
+### Status
+
+Landed in `src/spies.lua`:
+
+- **Defect 4.** `completed()` now requires `known.state == spy.state`
+  alongside the fall in progress, so a state transition no longer reads
+  as a finished mission.
+- **The mislabelled transition.** A `spy_surveillance_established` event
+  fires the turn `surveillance` goes false → true, carrying the city.
+- **Defect 3.** `spy_killed` reads its location from `known`, the last
+  live poll, instead of the emptied dead record.
+- **`spy_created` location.** The creation now carries `at()`, so a spy
+  first polled while already posted keeps that posting.
+
+Still owed: **defect 2** (`spy_moved` missed on re-postings and after a
+revival), which wants the per-poll `CityX`/`State` instrumentation above
+before a fix is chosen; and **the coup**, which has no record at all —
+a failure is now a spy going `dead` while posted to a minor, a success
+needs its own `CanStageCoup` read.
