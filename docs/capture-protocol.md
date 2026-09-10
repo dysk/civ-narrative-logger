@@ -111,14 +111,28 @@ Settles Defect 2's extraction-poll half: a `spy_moved` lost mid
 `MoveSpyTo` when a poll lands on a spy with `CityX == -1`. The fakes
 cannot reach this; it needs per-poll DLL values from a real move.
 
-### Step 0 — instrument first (code change, then rebuild)
+### Step 0 — the instrumented build (done)
 
-In `src/spies.lua`, at the point each poll reads a spy record, emit one
-debug line per spy per poll with `turn`, `row.State`, `row.CityX`,
-`row.CityY` and `row.PercentComplete`. A `logger_debug` record or a
-side file is fine — it only has to survive one game. Rebuild
-`dist/CivNarrativeLogger.lua` with `luajit tools/build.lua` and install
-that.
+**Branch `run-b-instrumentation`, commit `f083769`.** Install with
+`tools/install.sh <LEKMOD folder>` from that branch, and switch back to
+`main` and reinstall afterwards — the branch is throwaway and is not for
+merging.
+
+It writes one `logger_debug` line per spy per poll, through an opt-in
+sink `main.lua` supplies, so the suite still asserts the real record
+sequences and stays green (306 tests, 0 failures).
+
+It needs less than this section originally asked for. `spyRecord` fills
+`x`/`y` only when `row.CityX >= 0` (`src/adapter.lua:928`), so **a line
+with no `x` is the DLL answering `CityX == -1`** and no raw read is
+needed; the whole change lives in `src/spies.lua`. The line also carries
+the `playerIndex:AgentID` key as `agent`, which is stable across a death
+and is the only place in any log where it appears until *"A stable spy
+identity"* lands.
+
+**The game truncates `Lua.log` on every launch, and this run reloads.**
+Start `tools/watch.sh` before the game and leave it running, or copy
+`Lua.log` out before the reload — otherwise the first half is lost.
 
 ### The game
 
@@ -132,8 +146,9 @@ that.
 
 ### What to read out
 
-In the instrumented lines, find the poll(s) where `CityX == -1` — the
-spy extracted from X but not yet assigned to Y. Then check:
+Filter `logger_debug` for the spy, keyed on `agent` rather than the
+name, and find the poll(s) with **no `x`** — the spy extracted from X
+but not yet assigned to Y. Then check:
 
 - Does that poll emit **no** `spy_moved` (expected — `moved()`
   short-circuits on `spy.x ~= nil`)?
@@ -318,5 +333,8 @@ this run and stays open.
 
 ## Run B — still owed
 
-Unattempted. The instrumented build is still the only way to see a poll
-land on `CityX == -1`.
+Unattempted, but no longer blocked: the instrumented build exists on
+branch `run-b-instrumentation` (`f083769`), and Run B's step 0 above
+says how to install it and what to read out. When the log arrives, that
+section is the entry point — it names the two questions the run answers
+and the fix each answer implies.
