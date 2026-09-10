@@ -113,11 +113,11 @@ function M.new(civ, sink)
       return
     end
 
-    if not state.snapshot then
-      sink(json.encode({ event = "congress_founded", turn = turn, host = snapshot.host }))
-    else
-      diff(sink, turn, state.snapshot, snapshot)
-    end
+    -- The first poll of a session has nothing to diff against, and it
+    -- cannot tell a league just founded from one it is meeting again
+    -- after a reload. It announces neither: the snapshot below already
+    -- says the league exists and who hosts it.
+    if state.snapshot then diff(sink, turn, state.snapshot, snapshot) end
 
     sink(json.encode({
       event = "congress_snapshot",

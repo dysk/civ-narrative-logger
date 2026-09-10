@@ -41,13 +41,18 @@ t.test("no league means no output at all", function()
   t.assert_deep_equal({}, lines)
 end)
 
-t.test("a newly founded league emits congress_founded then congress_snapshot", function()
+-- The first poll of a session has no earlier snapshot to diff against,
+-- whether that is the league being founded or the logger being restarted
+-- into a league that has stood for a hundred turns. It cannot tell the
+-- two apart, so it announces neither: the snapshot alone says the league
+-- exists and who hosts it.
+t.test("a league seen for the first time emits only congress_snapshot", function()
   local civ, state = fakeCiv()
   state.snapshot = snapshot({ host = "Poland" })
   local lines, sink = captureSink()
   local poll = congress.new(civ, sink)
   poll(0)
-  t.assert_deep_equal({ "congress_founded", "congress_snapshot" }, eventNames(lines))
+  t.assert_deep_equal({ "congress_snapshot" }, eventNames(lines))
   t.assert_match('"host":"Poland"', lines[1])
 end)
 
@@ -58,7 +63,7 @@ t.test("polling again in the same turn is a no-op, even for another player", fun
   local poll = congress.new(civ, sink)
   poll(0)
   poll(1)
-  t.assert_deep_equal({ "congress_founded", "congress_snapshot" }, eventNames(lines))
+  t.assert_deep_equal({ "congress_snapshot" }, eventNames(lines))
 end)
 
 t.test("an unchanged league on a new turn only emits congress_snapshot", function()
@@ -70,7 +75,7 @@ t.test("an unchanged league on a new turn only emits congress_snapshot", functio
   state.turn = 2
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "congress_snapshot" },
+    { "congress_snapshot", "congress_snapshot" },
     eventNames(lines))
 end)
 
@@ -84,10 +89,10 @@ t.test("a host change is reported before the snapshot", function()
   state.snapshot = snapshot({ host = "Rome" })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "congress_host_changed", "congress_snapshot" },
+    { "congress_snapshot", "congress_host_changed", "congress_snapshot" },
     eventNames(lines))
-  t.assert_match('"old_host":"Poland"', lines[3])
-  t.assert_match('"new_host":"Rome"', lines[3])
+  t.assert_match('"old_host":"Poland"', lines[2])
+  t.assert_match('"new_host":"Rome"', lines[2])
 end)
 
 t.test("the United Nations forming is reported once", function()
@@ -102,7 +107,7 @@ t.test("the United Nations forming is reported once", function()
   state.turn = 3
   poll(0)
   t.assert_deep_equal({
-    "congress_founded", "congress_snapshot",
+    "congress_snapshot",
     "united_nations_formed", "congress_snapshot",
     "congress_snapshot",
   }, eventNames(lines))
@@ -126,11 +131,11 @@ t.test("a new proposal is reported", function()
   })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_proposed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_proposed", "congress_snapshot" },
     eventNames(lines))
-  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[3])
-  t.assert_match('"proposer":"Poland"', lines[3])
-  t.assert_match('"repeal":false', lines[3])
+  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[2])
+  t.assert_match('"proposer":"Poland"', lines[2])
+  t.assert_match('"repeal":false', lines[2])
 end)
 
 t.test("a proposal that becomes an active resolution has passed", function()
@@ -150,9 +155,9 @@ t.test("a proposal that becomes an active resolution has passed", function()
   })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_passed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_passed", "congress_snapshot" },
     eventNames(lines))
-  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[3])
+  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[2])
 end)
 
 t.test("a proposal that just disappears has failed", function()
@@ -169,7 +174,7 @@ t.test("a proposal that just disappears has failed", function()
   state.snapshot = snapshot({ host = "Poland" })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_failed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_failed", "congress_snapshot" },
     eventNames(lines))
 end)
 
@@ -198,7 +203,7 @@ t.test("a repeal proposal whose target survives has failed", function()
   })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_failed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_failed", "congress_snapshot" },
     eventNames(lines))
 end)
 
@@ -220,7 +225,7 @@ t.test("a repeal proposal that removes its target has passed", function()
   state.snapshot = snapshot({ host = "Poland" })
   poll(0)
   t.assert_deep_equal({
-    "congress_founded", "congress_snapshot",
+    "congress_snapshot",
     "resolution_passed", "resolution_repealed", "congress_snapshot",
   }, eventNames(lines))
 end)
@@ -253,19 +258,19 @@ end
 
 t.test("a one-shot resolution whose project starts running has passed", function()
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_passed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_passed", "congress_snapshot" },
     eventNames(pollOneShot(idle, underway, worldFair)))
 end)
 
 t.test("a one-shot resolution whose project already finished has passed", function()
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_passed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_passed", "congress_snapshot" },
     eventNames(pollOneShot(idle, finished, worldFair)))
 end)
 
 t.test("a one-shot resolution whose project never starts has failed", function()
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_failed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_failed", "congress_snapshot" },
     eventNames(pollOneShot(idle, idle, worldFair)))
 end)
 
@@ -275,7 +280,7 @@ end)
 -- rather than decided.
 t.test("a one-shot resolution whose project was already running is undetermined", function()
   t.assert_deep_equal({
-    "congress_founded", "congress_snapshot",
+    "congress_snapshot",
     "resolution_undetermined", "congress_snapshot",
   }, eventNames(pollOneShot(underway, underway, worldFair)))
 end)
@@ -286,11 +291,11 @@ t.test("a one-shot resolution with no project leaves no trace to read", function
     repeal = false, ongoing_effects = false,
   })
   t.assert_deep_equal({
-    "congress_founded", "congress_snapshot",
+    "congress_snapshot",
     "resolution_undetermined", "congress_snapshot",
   }, eventNames(lines))
-  t.assert_match('"resolution":"RESOLUTION_CHANGE_LEAGUE_HOST"', lines[3])
-  t.assert_match('"turn":2', lines[3])
+  t.assert_match('"resolution":"RESOLUTION_CHANGE_LEAGUE_HOST"', lines[2])
+  t.assert_match('"turn":2', lines[2])
 end)
 
 t.test("an active resolution that disappears has been repealed", function()
@@ -306,9 +311,9 @@ t.test("an active resolution that disappears has been repealed", function()
   state.snapshot = snapshot({ host = "Poland" })
   poll(0)
   t.assert_deep_equal(
-    { "congress_founded", "congress_snapshot", "resolution_repealed", "congress_snapshot" },
+    { "congress_snapshot", "resolution_repealed", "congress_snapshot" },
     eventNames(lines))
-  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[3])
+  t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[2])
 end)
 
 t.test("a poll error is logged instead of raised", function()
