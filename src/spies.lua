@@ -127,12 +127,35 @@ end
 function M.new(civ, sink)
   local state = { turn = nil, spies = nil }
 
+  -- TEMPORARY, for capture-protocol run B. Off unless main.lua sets
+  -- M.debugSink, so the suite never sees these lines and keeps asserting
+  -- the real record sequences.
+  -- Writes one line per spy per
+  -- poll so a reassignment can be read poll by poll. `x == nil` is the
+  -- extraction poll the run exists to catch: spyRecord only fills x/y
+  -- when row.CityX >= 0 (src/adapter.lua:928), so a positionless record
+  -- here is the DLL answering CityX == -1 mid-MoveSpyTo. The key carries
+  -- the AgentID, which no real event does yet.
+  local function debugSpies(turn, spies)
+    if not M.debugSink then return end
+    for _, key in ipairs(sortedKeys(spies)) do
+      local spy = spies[key]
+      M.debugSink(json.encode({
+        event = "logger_debug", hook = "spies", turn = turn, agent = key,
+        civ = spy.civ, spy = spy.spy, state = spy.state,
+        x = spy.x, y = spy.y, city = spy.city, city_civ = spy.city_civ,
+        progress = spy.progress, surveillance = spy.surveillance,
+      }))
+    end
+  end
+
   local function poll()
     local turn = civ.turn()
     if turn == state.turn then return end
     state.turn = turn
 
     local spies = civ.spies()
+    debugSpies(turn, spies)
     if state.spies then diff(sink, turn, state.spies, spies) end
     state.spies = spies
   end

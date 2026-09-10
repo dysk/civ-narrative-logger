@@ -41,6 +41,7 @@ function M.start(g)
   g.GameEvents.PlayerDoTurn.Add(diplomacy.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(cityStates.new(deps.civ, deps.sink))
   g.GameEvents.PlayerDoTurn.Add(tradeRoutes.new(deps.civ, deps.sink))
+  spies.debugSink = deps.sink -- TEMPORARY: capture-protocol run B instrumentation
   g.GameEvents.PlayerDoTurn.Add(spies.new(deps.civ, deps.sink))
   g.GameEvents.GameCoreTestVictory.Add(victory.new(deps.civ, deps.sink))
 end
