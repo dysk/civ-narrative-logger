@@ -4,35 +4,24 @@ Changes the logger still owes the downstream analyst
 (`civ-strategy-analyst`). Implemented ones move to
 `implemented-changes.md`.
 
-## Stop announcing a Congress founding on every reload
+## Carry the Congress across a reload seam
 
 ### The problem
 
 `congress.new` builds its state fresh — `{ turn = nil, snapshot = nil }`
-(`src/congress.lua:103`) — and the first poll of a session therefore
-takes the `not state.snapshot` branch (`:116`), announcing a founding
-and skipping the diff. Nothing carries the previous session's snapshot
-across the seam, because nothing persists between sessions at all: the
-census keeps its `known` table the same way (`src/census.lua:17`).
+(`src/congress.lua:103`) — so the first poll of a session has nothing to
+diff against and skips the diff. Nothing carries the previous session's
+snapshot across the seam, because nothing persists between sessions at
+all: the census keeps its `known` table the same way
+(`src/census.lua:17`).
 
-Measured twice now. `examples/espionage-test.jsonl` has five sessions
-and five `congress_founded` records for one league founded on turn 149;
-`examples/babylon-domination.jsonl` in the analyst repo shows the same
-cost plainly. That league was founded once, on turn 100, and the log claims
-
-```
-{"event":"congress_founded","host":"Babylon","turn":100}
-{"event":"congress_founded","host":"Babylon","turn":141}
-{"event":"congress_founded","host":"Babylon","turn":146}
-{"event":"congress_founded","host":"Babylon","turn":190}
-```
-
-one per `session_started`. Three of the four are false. This is not the
-one-shot defect and predates it — it costs every event type `diff`
-produces, not just outcomes: a host change, a repeal, a UN formation or
-a resolution decided across that seam is never written, and a vote that
-concluded there stays "pending" in the analyst forever, which is the
-same false claim `resolution_undetermined` was added to avoid.
+The false founding that poll used to announce has been dropped
+(`implemented-changes.md`). The skipped diff has not, and it is the
+expensive half: it costs every event type `diff` produces, so a host
+change, a repeal, a UN formation or a resolution decided across that
+seam is never written, and a vote that concluded there stays "pending"
+in the analyst forever — the same false claim `resolution_undetermined`
+was added to avoid.
 
 How much falls in the seam depends on how far the loaded save sits from
 the last poll. When a session resumes the turn it saved on, the skipped
@@ -50,16 +39,7 @@ settling while in this code, rather than assuming the same cause.
 
 ### Approach
 
-The founding is the easier half. `congress_founded` tells the analyst
-nothing it does not learn from the first `congress_snapshot` — the
-analyst names the type as known and reads it nowhere else — so the
-honest fix is to drop the event and let the first snapshot mark the
-league's arrival. Emitting it only when the league is genuinely new
-would need a way to tell "new league" from "new session", and no league
-API offers one.
-
-The lost diff is the harder half, and the capture run shrank it. A
-resuming session rebuilds its baseline from `civ.congressSnapshot()`,
+The capture run shrank this. A resuming session rebuilds its baseline from `civ.congressSnapshot()`,
 which reads the proposals list live from the league rather than from
 the log, so a proposal still in flight across a seam is recovered for
 free: in `espionage-test.jsonl` one resolution was proposed on turn 150,
@@ -75,7 +55,7 @@ an existing one.
 
 ### Verification
 
-The fakes can drive both halves: a poll sequence interrupted by a fresh
+The fakes can drive it: a poll sequence interrupted by a fresh
 `congress.new` over the same fake league is exactly the reload. What
 they cannot check is whether a real reload resumes where the last poll
 left off, so the seam's real width wants one replayed save.
@@ -316,74 +296,24 @@ completions, five located counterspy postings and a located kill.
 
 Still owed:
 
-- **A stable spy identity.** The poller keys spies on
-  `playerIndex:AgentID` (`src/adapter.lua:950`), which survives a death,
-  but the record carries `spy = row.Name` (`:920`) and the DLL renames a
-  spy when it revives. `ARABIA_0` died at Valletta and came back as
-  `ARABIA_8`; **all eight** revivals in india-diplo name a spy that was
-  never created. Downstream, `(civ, name)` is not an identity: a death
-  orphans a tenure and the revival invents a spy from nothing. Put
-  `AgentID` in the record and leave `spy` as the display name.
 - **Sessions.** The first poll of a session is only a baseline, so a spy
   created or posted inside a reload seam is never announced —
   Jerusalem's `GREECE_4` surfaces with a surveillance event and no prior
   record at all. Persisting `known` between sessions is the general fix
   and is shared with the other stateful pollers, but the spy half comes
-  almost free with the id above: a rebaseline can emit a located
-  `spy_created` for every spy it sees and let the analyst deduplicate.
+  almost free now that the record carries `agent`: a rebaseline can emit
+  a located `spy_created` for every spy it sees and let the analyst
+  deduplicate on the agent id.
 - **Defect 2, the extraction-poll half.** A `spy_moved` lost mid-`MoveSpyTo`
   when a poll lands on `CityX == -1`. Wants the per-poll `CityX`/`CityY`/
   `State` instrumentation above, from one replayed save with a spy
   reassigned between two cities, before a fix is chosen. Run B of the
-  capture protocol, not yet played.
-- **A successful coup.** A *failed* one no longer needs a record: the
-  located `spy_killed` in a minor plus the stager's influence stepping
-  down by 10 identifies it, both measured at Valletta on turn 181. A
-  success still writes nothing, and needs its own `CanStageCoup` read
-  joined to a city-state alliance change.
+  capture protocol: the instrumented build exists on branch
+  `run-b-instrumentation`, the run has not been played.
 
-## Guard a proposal with no proposer
-
-### The problem
-
-One turn of `espionage-test.jsonl` is missing from the Congress
-entirely — `congress_snapshot` runs 164, then 166 — and the log says
-why:
-
-```
-{"event":"logger_error","hook":"PlayerDoTurn (congress)",
- "error":"...CivNarrativeLogger.lua:70: attempt to index field '?' (a nil value)"}
-```
-
-Line 70 is the body of `civ.civName`, and the caller is
-`proposalRecord`:
-
-```lua
-proposer = civ.civName(p.ProposalPlayer),
-```
-
-`src/adapter.lua:1044`. Two lines below, the host is guarded —
-`host >= 0 and civ.civName(host) or nil` — and `ProposalPlayer` is not.
-A proposal with no player behind it indexes `g.Players[-1]`, `civName`
-indexes nil, and `poll`'s `pcall` swallows the whole turn: the
-snapshot, the proposals diff, and any outcome that resolved on it.
-
-The cost is small but silent, and it is a whole-poll loss rather than a
-missing field.
-
-### Approach
-
-The same guard as the host, in `proposalRecord`:
-
-```lua
-proposer = p.ProposalPlayer >= 0 and civ.civName(p.ProposalPlayer) or nil,
-```
-
-Worth a look at whether `civName` should be defensive in its own right,
-since every caller is one bad id away from taking a poll down with it.
-
-### Verification
-
-A fake league with one proposal whose `ProposalPlayer` is `-1` must
-still produce a `congress_snapshot`, with `proposer` absent from the
-`resolution_proposed` record rather than the poll erroring.
+Off this list: **a successful coup**. A *failed* one is identified by
+the located `spy_killed` in a minor plus the stager's influence stepping
+down by 10, both measured at Valletta on turn 181. A success turned out
+to need nothing from the logger either — it swaps the stager's influence
+with the former ally's and changes the alliance, and both are already
+written. The detection is the analyst's, not this repo's.

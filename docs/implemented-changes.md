@@ -724,3 +724,52 @@ time showed `defensive_pact_ended`, `embassy_ended` and
 `trade_agreement_ended` sitting in `src/diplomacy.lua` with no test
 reaching them - three transitions the analyst knew about and the suite
 did not. They are covered now.
+
+## Give a spy an identity its own death cannot break
+
+The poller has always keyed spies on `playerIndex:AgentID`, which is
+stable for the whole game: the id is the index into `m_aSpyList`, the
+list only grows, and a killed spy stays in its slot marked dead until
+it revives there. The record it emitted carried only `spy = row.Name`,
+and the DLL redraws that name on revival
+(`CvEspionageClasses.cpp:928-936`), so downstream `(civ, name)` was not
+an identity. `ARABIA_0` died at Valletta and came back as `ARABIA_8`;
+**all eight** revivals in `india-diplo.jsonl` name a spy that was never
+created, which is exactly why those spies read as unlocatable.
+
+The record now carries `agent` beside `spy`: the reader keys on what
+the poller keys on, and the name stays as a label a human can read. A
+death and the revival after it are one agent under two names, and the
+log says so.
+
+## Stop a proposal nobody raised from silencing the Congress
+
+A proposal the league itself puts up answers `ProposalPlayer` -1, and
+`Players` has no slot at -1, so reading the proposer called a method on
+nil. `poll` runs under `pcall`, so the game survived - but the turn lost
+every congress record, not just the field that could not be read:
+`espionage-test.jsonl` runs `congress_snapshot` 164, then 166, with a
+`logger_error` where 165 should be.
+
+`proposalRecord` now guards the id the way the host two fields below
+was already guarded. Whether `civName` should be defensive in its own
+right is still open; every caller is one bad id away from the same
+whole-poll loss.
+
+## Stop announcing a Congress founding the logger cannot date
+
+`congress.new` built its state fresh, so the first poll of every session
+took the "no snapshot yet" branch and called it a founding. One league
+founded on turn 100 was announced four times in
+`babylon-domination.jsonl`, and the five sessions of
+`espionage-test.jsonl` produced five foundings for a league founded
+once. Every one after the first was a date for something that had
+already happened.
+
+The event is gone rather than repaired: telling "new league" from "new
+session" needs a fact no league API offers, and the
+`congress_snapshot` written on the same turn already says the league
+exists and who hosts it. Nothing downstream read the founding.
+
+The other half of that seam - the diff a resuming session skips - is
+still open and is described in `planned-changes.md`.
