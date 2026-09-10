@@ -31,8 +31,12 @@ local function sortedKeys(t)
   return keys
 end
 
+-- Every record carries the agent id as well as the name, because the
+-- DLL renames a spy when it revives it and the name alone would break a
+-- career in half at exactly the death worth reading about.
 local function record(event, turn, spy, extra)
-  local out = { event = event, turn = turn, civ = spy.civ, spy = spy.spy }
+  local out = { event = event, turn = turn, civ = spy.civ,
+                agent = spy.agent, spy = spy.spy }
   for field, value in pairs(extra or {}) do out[field] = value end
   return out
 end

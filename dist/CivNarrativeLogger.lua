@@ -970,9 +970,15 @@ function M.new(g)
   -- dead - answers -1 (CvEspionageClasses.cpp:2504-2514), while zero is
   -- a spy that has just arrived and begun, which the poller has to be
   -- able to tell from a mission that finished and reset.
+  --
+  -- Both the name and the AgentID go out. The DLL redraws the name when
+  -- it revives a spy into the same slot (CvEspionageClasses.cpp:928-936),
+  -- so the name is a label for a reader and the id is the identity a
+  -- career can be followed by.
   local function spyRecord(p, row)
     local record = {
       civ = p:GetCivilizationShortDescription(),
+      agent = row.AgentID,
       spy = row.Name,
       rank = SPY_RANKS[row.Rank],
       state = SPY_STATES[row.State],
@@ -2606,8 +2612,12 @@ local function sortedKeys(t)
   return keys
 end
 
+-- Every record carries the agent id as well as the name, because the
+-- DLL renames a spy when it revives it and the name alone would break a
+-- career in half at exactly the death worth reading about.
 local function record(event, turn, spy, extra)
-  local out = { event = event, turn = turn, civ = spy.civ, spy = spy.spy }
+  local out = { event = event, turn = turn, civ = spy.civ,
+                agent = spy.agent, spy = spy.spy }
   for field, value in pairs(extra or {}) do out[field] = value end
   return out
 end

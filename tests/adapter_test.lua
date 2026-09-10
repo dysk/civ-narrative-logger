@@ -1472,15 +1472,18 @@ local spyCiv = adapter.new(spyGlobals)
 t.test("spies reports every major's spies, keyed by player and agent", function()
   t.assert_deep_equal({
     ["0:0"] = {
-      civ = "Poland", spy = "Alexis", rank = "agent", state = "gathering_intel",
+      civ = "Poland", agent = 0, spy = "Alexis", rank = "agent",
+      state = "gathering_intel",
       city = "Antium", city_civ = "Rome", x = 40, y = 3,
       turns_left = 6, progress = 62, surveillance = true,
     },
     ["0:1"] = {
-      civ = "Poland", spy = "Marie", rank = "recruit", state = "unassigned",
+      civ = "Poland", agent = 1, spy = "Marie", rank = "recruit",
+      state = "unassigned",
     },
     ["1:0"] = {
-      civ = "Rome", spy = "Lucius", rank = "special_agent", state = "counter_intel",
+      civ = "Rome", agent = 0, spy = "Lucius", rank = "special_agent",
+      state = "counter_intel",
       city = "Warsaw", city_civ = "Poland", x = 10, y = 20,
     },
   }, spyCiv.spies())
@@ -1490,6 +1493,15 @@ end)
 t.test("spies names the rank and the state rather than their text keys", function()
   local spy = spyCiv.spies()["1:0"]
   t.assert_deep_equal({ "special_agent", "counter_intel" }, { spy.rank, spy.state })
+end)
+
+-- The DLL redraws the name when it revives a spy into the same slot
+-- (CvEspionageClasses.cpp:928-936), so the name labels a spy and the
+-- AgentID is what identifies it. Carrying the id is what lets a reader
+-- follow one agent across its own death; a name cannot be repaired
+-- into an identity after the fact.
+t.test("spies carries the agent id, which outlives the name", function()
+  t.assert_equal(1, spyCiv.spies()["0:1"].agent)
 end)
 
 t.test("spies leaves an unassigned spy without a city or a plot", function()
