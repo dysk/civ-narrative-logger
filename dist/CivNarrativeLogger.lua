@@ -1099,12 +1099,15 @@ function M.new(g)
     return false
   end
 
+  -- A proposal nobody raised answers ProposalPlayer -1, and Players has
+  -- no such slot: calling a method on it is an error that costs the whole
+  -- congress poll for that turn, not just this one field.
   local function proposalRecord(p, repeal)
     local row = g.GameInfo.Resolutions[p.Type]
     return {
       id = p.ID,
       type = typeOf(row),
-      proposer = civ.civName(p.ProposalPlayer),
+      proposer = p.ProposalPlayer >= 0 and civ.civName(p.ProposalPlayer) or nil,
       repeal = repeal,
       ongoing_effects = row ~= nil and hasOngoingEffects(row),
       league_project = row and row.LeagueProjectEnabled or nil,

@@ -955,6 +955,20 @@ t.test("congressSnapshot reads host, delegates and proposals", function()
   }, congressCiv.congressSnapshot())
 end)
 
+-- A proposal the league itself raised carries ProposalPlayer -1, and
+-- indexing Players with it is not an error Lua catches - it is a nil
+-- table being called, which takes down the whole congress poll and
+-- costs that turn every congress record, not just the proposer.
+t.test("congressSnapshot leaves a proposal nobody raised without a proposer", function()
+  congressGlobals._league = fakeLeague({
+    host = 0,
+    votes = { [0] = 5, [1] = 2 },
+    coreVotes = { [0] = 1, [1] = 1 },
+    enactProposals = { { ID = 5, Type = 5, ProposalPlayer = -1 } },
+  })
+  t.assert_nil(congressCiv.congressSnapshot().proposals[5].proposer)
+end)
+
 -- Whether a resolution keeps existing after enactment decides how its
 -- outcome can be observed at all: CvLeague::DoEnactResolution only pushes
 -- a resolution onto m_vActiveResolutions when HasOngoingEffects() is true.
