@@ -15,8 +15,10 @@ and skipping the diff. Nothing carries the previous session's snapshot
 across the seam, because nothing persists between sessions at all: the
 census keeps its `known` table the same way (`src/census.lua:17`).
 
-`examples/babylon-domination.jsonl` in the analyst repo shows the cost
-plainly. That league was founded once, on turn 100, and the log claims
+Measured twice now. `examples/espionage-test.jsonl` has five sessions
+and five `congress_founded` records for one league founded on turn 149;
+`examples/babylon-domination.jsonl` in the analyst repo shows the same
+cost plainly. That league was founded once, on turn 100, and the log claims
 
 ```
 {"event":"congress_founded","host":"Babylon","turn":100}
@@ -56,13 +58,20 @@ league's arrival. Emitting it only when the league is genuinely new
 would need a way to tell "new league" from "new session", and no league
 API offers one.
 
-The lost diff is the harder half and needs the log to describe itself:
-`congress_snapshot` would have to carry the proposals, active
-resolutions and project states that `diff` compares, so a resuming
-session can rebuild its baseline from the last snapshot it wrote rather
-than starting blind. That is a bigger record and a new read path — worth
-doing only if the seam is shown to swallow something real, which is what
-the `WORLD_RELIGION` question above should settle first.
+The lost diff is the harder half, and the capture run shrank it. A
+resuming session rebuilds its baseline from `civ.congressSnapshot()`,
+which reads the proposals list live from the league rather than from
+the log, so a proposal still in flight across a seam is recovered for
+free: in `espionage-test.jsonl` one resolution was proposed on turn 150,
+crossed the turn-153 seam and still had its `resolution_passed` written
+on 168, and another crossed three seams before failing on 181. The only
+loss left is a vote that both starts and resolves inside one seam.
+
+Closing that needs no new read path after all. The proposals, active
+resolutions and project states are already in `snapshot` and are simply
+not written out; putting them in `congress_snapshot` lets the analyst
+reconstruct an outcome the poller could not see. A bigger record, but
+an existing one.
 
 ### Verification
 
@@ -301,17 +310,80 @@ Landed in `src/spies.lua`:
   move is still recorded. Fires once — a counterspy left in place stays
   quiet.
 
+All six are confirmed against a live game in `docs/capture-protocol.md`:
+fifteen postings, every surveillance event on posting + 4, zero false
+completions, five located counterspy postings and a located kill.
+
 Still owed:
 
+- **A stable spy identity.** The poller keys spies on
+  `playerIndex:AgentID` (`src/adapter.lua:950`), which survives a death,
+  but the record carries `spy = row.Name` (`:920`) and the DLL renames a
+  spy when it revives. `ARABIA_0` died at Valletta and came back as
+  `ARABIA_8`; **all eight** revivals in india-diplo name a spy that was
+  never created. Downstream, `(civ, name)` is not an identity: a death
+  orphans a tenure and the revival invents a spy from nothing. Put
+  `AgentID` in the record and leave `spy` as the display name.
+- **Sessions.** The first poll of a session is only a baseline, so a spy
+  created or posted inside a reload seam is never announced —
+  Jerusalem's `GREECE_4` surfaces with a surveillance event and no prior
+  record at all. Persisting `known` between sessions is the general fix
+  and is shared with the other stateful pollers, but the spy half comes
+  almost free with the id above: a rebaseline can emit a located
+  `spy_created` for every spy it sees and let the analyst deduplicate.
 - **Defect 2, the extraction-poll half.** A `spy_moved` lost mid-`MoveSpyTo`
   when a poll lands on `CityX == -1`. Wants the per-poll `CityX`/`CityY`/
   `State` instrumentation above, from one replayed save with a spy
-  reassigned between two cities, before a fix is chosen.
-- **Sessions.** The first poll of a session is only a baseline, so a
-  posting made across a reload seam is lost the same way `congress.new`
-  loses a diff. Needs `known` to persist between sessions — shared with
-  the other stateful pollers, not spy-specific.
-- **The coup.** No record at all. A failure is a spy going `dead` while
-  posted to a minor, which the analyst can already infer from the located
-  `spy_killed`; a success needs its own `CanStageCoup` read joined to a
-  city-state alliance change.
+  reassigned between two cities, before a fix is chosen. Run B of the
+  capture protocol, not yet played.
+- **A successful coup.** A *failed* one no longer needs a record: the
+  located `spy_killed` in a minor plus the stager's influence stepping
+  down by 10 identifies it, both measured at Valletta on turn 181. A
+  success still writes nothing, and needs its own `CanStageCoup` read
+  joined to a city-state alliance change.
+
+## Guard a proposal with no proposer
+
+### The problem
+
+One turn of `espionage-test.jsonl` is missing from the Congress
+entirely — `congress_snapshot` runs 164, then 166 — and the log says
+why:
+
+```
+{"event":"logger_error","hook":"PlayerDoTurn (congress)",
+ "error":"...CivNarrativeLogger.lua:70: attempt to index field '?' (a nil value)"}
+```
+
+Line 70 is the body of `civ.civName`, and the caller is
+`proposalRecord`:
+
+```lua
+proposer = civ.civName(p.ProposalPlayer),
+```
+
+`src/adapter.lua:1044`. Two lines below, the host is guarded —
+`host >= 0 and civ.civName(host) or nil` — and `ProposalPlayer` is not.
+A proposal with no player behind it indexes `g.Players[-1]`, `civName`
+indexes nil, and `poll`'s `pcall` swallows the whole turn: the
+snapshot, the proposals diff, and any outcome that resolved on it.
+
+The cost is small but silent, and it is a whole-poll loss rather than a
+missing field.
+
+### Approach
+
+The same guard as the host, in `proposalRecord`:
+
+```lua
+proposer = p.ProposalPlayer >= 0 and civ.civName(p.ProposalPlayer) or nil,
+```
+
+Worth a look at whether `civName` should be defensive in its own right,
+since every caller is one bad id away from taking a poll down with it.
+
+### Verification
+
+A fake league with one proposal whose `ProposalPlayer` is `-1` must
+still produce a `congress_snapshot`, with `proposer` absent from the
+`resolution_proposed` record rather than the poll erroring.

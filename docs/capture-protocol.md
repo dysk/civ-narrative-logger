@@ -186,3 +186,137 @@ short dedicated game with the World Congress founded.
 - If only the founding repeated: drop the `congress_founded` event and
   let the first `congress_snapshot` mark the league's arrival. The
   analyst reads `congress_founded` nowhere else.
+
+---
+
+# What the runs settled
+
+Run A and run C were played into one game — `examples/espionage-test.jsonl`
+in the analyst repo, Arabia, quick speed, turns 82–189, five sessions.
+Run B was not attempted: it needs the instrumented build.
+
+## Run A — every landed fix holds
+
+**Surveillance is exact, and the constant is 4.** Fifteen postings in the
+log reach `spy_surveillance_established`, and every one of them lands on
+**posting + 4** — `iSpyTurnsToTravel` 1 plus `GetInfluenceSurveillanceTime`
+3, with no exceptions and no spread. Nobody held Familiar+ influence over
+a target, so the 1-turn branch stays unexercised; the 3-turn branch is now
+measured rather than derived.
+
+**Defect 4 is closed in the wild.** Zero completions land on a
+surveillance turn, and zero land within four turns of a posting. The
+whole class of false positive is gone, not reduced. The count fell as
+predicted too: 24 completions over 107 turns of espionage, against
+india-diplo's 53 of which ~30 were real.
+
+**The genuine repeat pattern survived the fix.** Arabia's spy rigged
+Reykjavik on turns 151, 161, 171 and 181 — four cycles, exactly ten turns
+apart, all four written. Jerusalem's spy in Mecca produced eight intel
+completions with gaps of 4–9. Neither is confusable with the transition
+artifact any more, because the artifact no longer exists.
+
+**A counterspy leaves its trace.** Five `spy_moved` records carry
+`counter_intel`, each in one of its owner's own cities, and none of them
+is followed by a surveillance event or a completion. The transition lands
+**one** turn after the posting, not four — a counterspy needs no
+surveillance — which gives the analyst a second, independent way to tell a
+garrison from an attack.
+
+The one that fires more than once is honest: the Sioux oscillated a single
+spy between Ihankthunwanna and Isanyathi four times in ten turns, and each
+leg is a real posting.
+
+**The coup is visible after all, and the influence penalty is −10.**
+Arabia posted a spy to Valletta on turn 177 and it died on 181 with no
+counterspy anywhere near it. Arabia's influence at Valletta, absent from
+the turn-178 snapshot, reads −8 at turn 182 with `per_turn` +1.25 — that
+is −10 on the turn of the kill, recovering. No `city_state_ally_changed`.
+A failed coup is therefore already identifiable from events that exist:
+a located `spy_killed` in a minor, plus a ~−10 step in the stager's
+influence. Only a *successful* coup still needs its own read.
+
+**Located `spy_created` and `spy_killed` both work.** Five creations carry
+a city; the kill at Valletta carries the city-state read from the last
+live poll.
+
+## Run A — two defects the run exposed
+
+### A revived spy comes back under a different name
+
+Arabia's `ARABIA_0` died at Valletta on turn 181. On turn 186 the log
+says `spy_revived` for **`ARABIA_8`** — a name that appears nowhere
+before. The poller is right: it keys on `playerIndex:AgentID`
+(`src/adapter.lua:950`), which is stable, and correctly diffs the same
+slot from `dead` to alive. But the record carries `spy = row.Name`
+(`:920`), and the DLL draws a fresh name on revival.
+
+This is not a one-off. In india-diplo **all eight** revivals name a spy
+that was never created — `ENGLAND_0`, `ENGLAND_1`, `ENGLAND_4`,
+`CHINA_0`, `CHINA_5`, `CHINA_9`, `IROQUOIS_6`, `NETHERLANDS_2`. That is
+the whole of the analyst's "spies it could never locate": they are
+revivals of spies it knew under other names.
+
+Downstream, `(civ, name)` is not an identity. A death orphans a tenure
+and the revival invents a spy from nothing, and two live spies of one civ
+can in principle collide on a recycled name. The fix is one field: put
+`AgentID` in the record and let `spy` stay the display name.
+
+Fixing this also makes the session seam almost free. The first poll of a
+session is silent by design, so a spy created or posted inside the seam is
+never announced — Jerusalem's `GREECE_4` surfaces at turn 186 with a
+surveillance event and no prior record at all. With a stable id in the
+payload, the rebaseline can simply emit a located `spy_created` for
+every spy it sees and let the analyst deduplicate.
+
+### A proposal with no proposer crashes the congress poll
+
+```
+{"event":"logger_error","hook":"PlayerDoTurn (congress)",
+ "error":"...CivNarrativeLogger.lua:70: attempt to index field '?' (a nil value)"}
+```
+
+Line 70 is `civ.civName`, reached from
+`proposer = civ.civName(p.ProposalPlayer)` in `proposalRecord`
+(`src/adapter.lua:1044`). `GetHostMember` is already guarded with
+`host >= 0` two lines below; `ProposalPlayer` is not, and a proposal with
+no player behind it indexes `g.Players[-1]`.
+
+It cost the whole turn-165 poll — the snapshot and any diff — which is
+why `congress_snapshot` skips from 164 to 166. Same guard as the host.
+
+## Run C — the seam keeps outcomes, and only the founding is false
+
+**`congress_founded` fires once per session: five sessions, five
+foundings.** The league was founded once, on turn 149. Turns 154, 174,
+178 and 182 are false. Confirmed exactly as predicted — drop the event
+and let the first `congress_snapshot` mark the arrival.
+
+**The outcome does not vanish.** `RESOLUTION_NATURAL_HERITAGE_SITES` was
+proposed on turn 150, the session broke at 153, and the resolution passed
+on 168 with `resolution_passed` written. `RESOLUTION_WORLD_RELIGION` was
+proposed on 169 and survived **three** seams before failing on 181, also
+written.
+
+The reason is worth recording, because it makes the hard half of the
+congress fix much cheaper than it looked. `congress.new` rebuilds its
+baseline from `civ.congressSnapshot()`, which reads the proposals list
+**live from the league**, not from the log. A pending proposal is
+therefore recovered for free across any seam. The only thing a seam can
+still swallow is a vote that both starts and resolves inside it — and
+nothing in this game did.
+
+So `congress_snapshot` does not need "a bigger record and a new read
+path". The proposals and active resolutions are already in `snapshot`
+and are simply not written out. Adding them to the record closes the
+remaining hole and lets the analyst compute an outcome itself, with no
+new DLL read at all.
+
+The unexplained babylon-domination symptom — a repeal proposed on turn
+189 that never gets an outcome, with no seam to blame — is untouched by
+this run and stays open.
+
+## Run B — still owed
+
+Unattempted. The instrumented build is still the only way to see a poll
+land on `CityX == -1`.
