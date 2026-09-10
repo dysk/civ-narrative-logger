@@ -113,14 +113,17 @@ cannot reach this; it needs per-poll DLL values from a real move.
 
 ### Step 0 — the instrumented build (done)
 
-**Branch `run-b-instrumentation`, commit `f083769`.** Install with
+**Branch `run-b-instrumentation`, commit `9768f63`.** Install with
 `tools/install.sh <LEKMOD folder>` from that branch, and switch back to
 `main` and reinstall afterwards — the branch is throwaway and is not for
 merging.
 
 It writes one `logger_debug` line per spy per poll, through an opt-in
 sink `main.lua` supplies, so the suite still asserts the real record
-sequences and stays green (306 tests, 0 failures).
+sequences and stays green (309 tests, 0 failures). The branch sits on
+top of the three fixes that landed after the first capture run — the
+spy `agent` id, the guarded proposer and the dropped
+`congress_founded` — so this run exercises them in the wild as well.
 
 It needs less than this section originally asked for. `spyRecord` fills
 `x`/`y` only when `row.CityX >= 0` (`src/adapter.lua:928`), so **a line
@@ -334,7 +337,7 @@ this run and stays open.
 ## Run B — still owed
 
 Unattempted, but no longer blocked: the instrumented build exists on
-branch `run-b-instrumentation` (`f083769`), and Run B's step 0 above
+branch `run-b-instrumentation` (`9768f63`), and Run B's step 0 above
 says how to install it and what to read out. When the log arrives, that
 section is the entry point — it names the two questions the run answers
 and the fix each answer implies.
