@@ -102,7 +102,8 @@ After the reload, check:
   logged 53 completions where ~30 were real. A comparable game should
   now log close to the real number.
 - Whatever the reload seam swallowed becomes the concrete case for the
-  "Sessions" item in `planned-changes.md`.
+  "Sessions" item. It did, twice, and the item closed on it: a resuming
+  session now announces every spy it can see (`implemented-changes.md`).
 
 ---
 
@@ -390,8 +391,8 @@ rebaselines. The `spy_surveillance_established` that follows on 139 is
 the only trace the reassignment leaves — the same shape as Jerusalem's
 `GREECE_4` in Run A. For the same reason two sessions and six spies
 produced **zero** `spy_created` records. That is the concrete case the
-"Sessions" item in `planned-changes.md` was waiting for, and the last
-open espionage item.
+"Sessions" item was waiting for, and it closed on it - the rebaseline now
+announces every spy a resuming session can see (`implemented-changes.md`).
 
 **Surveillance is +4 again**, in a second game: all six postings with a
 `spy_moved` to date them establish surveillance exactly four turns

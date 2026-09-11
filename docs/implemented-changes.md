@@ -772,4 +772,66 @@ session" needs a fact no league API offers, and the
 exists and who hosts it. Nothing downstream read the founding.
 
 The other half of that seam - the diff a resuming session skips - is
-still open and is described in `planned-changes.md`.
+closed from the other end: the snapshot now carries the proposals, the
+active resolutions and the projects, so what the skipped diff would have
+said can be read off the record instead.
+
+## Announce the spies a reload seam would have swallowed
+
+The first poll of a session had nothing to diff against and so wrote
+nothing, which made every spy created or posted inside a reload seam a
+spy the log never mentions. Run B measured it: two sessions, six spies,
+**zero** `spy_created` records, and a reassignment ordered on turn 134
+that arrived on the first poll after the reload left no trace but the
+surveillance event four turns later. `espionage-test.jsonl` has the same
+shape in Jerusalem's `GREECE_4`, which surfaces with surveillance already
+established and no prior record at all, and india-diplo's one unexplained
+re-posting - `ENGLAND_6`, Amsterdam to Osininka with no move between -
+dates to turn 164, the first poll of the session that resumed at 163.
+
+The poller now diffs against an empty table instead of skipping the diff,
+so a resuming session announces every spy it can see as a located
+`spy_created`. A spy the analyst already knows is therefore announced
+again, which is the price of the fix rather than a flaw in it: the record
+carries `agent`, stable for the whole game, so the duplicate is
+recognisable as one. The city-state poller already makes the same trade -
+a session opens with a snapshot per city-state - and for the same reason,
+that a log resumed mid-game should not be blind until something happens
+to change.
+
+A fresh game costs nothing for this, because `m_aSpyList` is empty until
+somebody reaches the Renaissance and the poll is an empty list against an
+empty list until then.
+
+This was the last item owed from the counterspy work. The six fixes
+before it - the state-unchanged guard on completions,
+`spy_surveillance_established`, located `spy_created` and `spy_killed`,
+the revival fall-through and the `counter_intel` posting - landed in
+`b51a639` and are validated against a live game in `capture-protocol.md`.
+
+## Say what the Congress had before it, not just who hosts it
+
+`congress_snapshot` carried the host, the delegates and the diplo-victory
+threshold. The proposals, the active resolutions and the league project
+states were read on every poll, used for the diff, and then dropped.
+
+Run C showed why that was so nearly enough. `congress.new` rebuilds its
+baseline from `civ.congressSnapshot()`, which reads the proposals list
+live from the league rather than from the log, so a vote still in flight
+is recovered across any seam - `RESOLUTION_WORLD_RELIGION` crossed three
+of them and still had its outcome written. What no seam can give back is
+a vote both raised and decided inside one: neither snapshot on either
+side of it holds the proposal, so there is nothing for a diff to report.
+
+The record now carries all three lists, and `united_nations` with them -
+the formation is a diff too, and a diff is exactly what a resuming
+session skips. No new read was needed for any of it. The proposal record
+written out is the one `outcome()` reasons from - `repeal`,
+`ongoing_effects`, `league_project` - so the analyst can settle a vote
+the poller never saw by the same rules the poller would have used.
+
+The ids are the league's own and `pairs()` hands them out in arbitrary
+order, so both lists are sorted by id and written as arrays. A league
+with nothing before it is most turns of the game, so an empty list is
+left out of the record entirely, the way `city_state_snapshot` leaves out
+empty relations.
