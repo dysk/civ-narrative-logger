@@ -145,6 +145,11 @@ The instrumentation that settles it is small: log `row.CityX`,
 `row.CityY` and `row.State` per poll for one spy across one
 reassignment.
 
+**It was run, and only the second cause is real** — plus a third the
+instrumentation exposed, the reload seam. See the status below; the rest
+of this section is the reading that was made before the run, kept
+because the arithmetic in it still dates the events.
+
 **3. `spy_killed` throws away a location it is holding.** `diffSpy`
 writes `at(spy)` — the *dead* record — and the DLL calls
 `ExtractSpyFromCity` before setting `SPY_STATE_DEAD`, so `CityX` is
@@ -229,11 +234,11 @@ to reconstruct from the DLL's constants. One event per posting, about 39
 for a whole game. It is the cheapest record in this document and it
 answers a question nothing else can.
 
-Defect 2 wants the instrumentation above first. If the extraction poll
-is the cause, `moved()` should compare against the last *positioned*
-record rather than the immediately previous one; if the revival
-early-return is the cause, `diffSpy` should fall through to the move
-check after emitting `spy_revived`.
+Defect 2 wanted the instrumentation above first, and got it. The
+revival early-return was the cause — `diffSpy` now falls through to the
+move check after emitting `spy_revived` — and `moved()` needs no change,
+because no poll ever lands on a spy mid-`MoveSpyTo`. The residue is the
+reload seam, which is its own item.
 
 Worth doing in the same pass, since it is the other espionage event that
 does not exist: **a coup has no record at all.**
@@ -263,9 +268,12 @@ falling must produce a completion. The regression to guard is the count,
 not the shape — 53 logged completions in india-diplo should become about
 30.
 
-What the fakes cannot settle is defect 2, which needs one replayed save
-with a spy reassigned between two cities and the per-poll `CityX`
-written out beside the events.
+What the fakes cannot settle is defect 2, which needed one replayed save
+with a spy reassigned between two cities and the per-poll `CityX` written
+out beside the events. That run is played and the answer is in the
+status below: the extraction poll does not happen. What is left to verify
+is the reload seam, and a fresh poller over the same fake spies is
+exactly that.
 
 ### Status
 
@@ -294,22 +302,32 @@ All six are confirmed against a live game in `docs/capture-protocol.md`:
 fifteen postings, every surveillance event on posting + 4, zero false
 completions, five located counterspy postings and a located kill.
 
+**Defect 2's extraction-poll half needs no fix.** Run B of the capture
+protocol settled it from 138 per-poll debug lines over 26 reassignments:
+`x` is absent only when a spy is `unassigned`, never mid-`MoveSpyTo`, so
+the poll it feared does not occur — and `moved()` would survive it
+anyway, since a positionless `known` compares `nil ~= x` and the arrival
+still fires. Every one of the 26 reassignments was announced. The lost
+postings in india-diplo were the revival early-return (six spies), the
+unlocated `spy_created` (five), and for the one re-posting among them the
+session seam — all three either fixed or below.
+
 Still owed:
 
 - **Sessions.** The first poll of a session is only a baseline, so a spy
   created or posted inside a reload seam is never announced —
   Jerusalem's `GREECE_4` surfaces with a surveillance event and no prior
-  record at all. Persisting `known` between sessions is the general fix
-  and is shared with the other stateful pollers, but the spy half comes
-  almost free now that the record carries `agent`: a rebaseline can emit
-  a located `spy_created` for every spy it sees and let the analyst
-  deduplicate on the agent id.
-- **Defect 2, the extraction-poll half.** A `spy_moved` lost mid-`MoveSpyTo`
-  when a poll lands on `CityX == -1`. Wants the per-poll `CityX`/`CityY`/
-  `State` instrumentation above, from one replayed save with a spy
-  reassigned between two cities, before a fix is chosen. Run B of the
-  capture protocol: the instrumented build exists on branch
-  `run-b-instrumentation`, the run has not been played.
+  record at all, and `ENGLAND_6`'s Amsterdam → Osininka re-posting in
+  india-diplo falls in the turn-164 poll of the session that resumed at
+  163. Run B reproduces it deliberately: a reassignment ordered on turn
+  134 and arriving on the first poll after the reload is in the debug
+  lines and in no event, and two sessions of six spies produced zero
+  `spy_created` records. This is now the only open espionage item.
+  Persisting `known` between sessions is the general fix and is shared
+  with the other stateful pollers, but the spy half comes almost free
+  now that the record carries `agent`: a rebaseline can emit a located
+  `spy_created` for every spy it sees and let the analyst deduplicate on
+  the agent id.
 
 Off this list: **a successful coup**. A *failed* one is identified by
 the located `spy_killed` in a minor plus the stager's influence stepping

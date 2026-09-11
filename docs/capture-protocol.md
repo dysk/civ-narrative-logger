@@ -4,7 +4,8 @@ What has to happen in a live game, with the current
 `dist/CivNarrativeLogger.lua` installed, to move the open items in
 `planned-changes.md`. Three runs, each answering a different question.
 Run A validates what already landed and unblocks the analyst; runs B and
-C settle the fixes that are still owed.
+C settle the fixes that are still owed. **All three have now been
+played** — what each one settled is at the end of this file.
 
 The bundle to install is the one at `b51a639` — Defect 3, Defect 4,
 `spy_created` location, `spy_surveillance_established`, the revival
@@ -105,7 +106,7 @@ After the reload, check:
 
 ---
 
-## Run B — instrumented spy reassignment
+## Run B — instrumented spy reassignment (played)
 
 Settles Defect 2's extraction-poll half: a `spy_moved` lost mid
 `MoveSpyTo` when a poll lands on a spy with `CityX == -1`. The fakes
@@ -211,7 +212,8 @@ short dedicated game with the World Congress founded.
 
 Run A and run C were played into one game — `examples/espionage-test.jsonl`
 in the analyst repo, Arabia, quick speed, turns 82–189, five sessions.
-Run B was not attempted: it needs the instrumented build.
+Run B was played separately from the instrumented build —
+`examples/run-b-test.jsonl`, Polynesia, turns 122–140, two sessions.
 
 ## Run A — every landed fix holds
 
@@ -334,10 +336,74 @@ The unexplained babylon-domination symptom — a repeal proposed on turn
 189 that never gets an outcome, with no seam to blame — is untouched by
 this run and stays open.
 
-## Run B — still owed
+## Run B — the extraction poll never happens, and could not hurt if it did
 
-Unattempted, but no longer blocked: the instrumented build exists on
-branch `run-b-instrumentation` (`9768f63`), and Run B's step 0 above
-says how to install it and what to read out. When the log arrives, that
-section is the entry point — it names the two questions the run answers
-and the fix each answer implies.
+Played from branch `run-b-instrumentation` into
+`examples/run-b-test.jsonl` in the analyst repo: Polynesia, turns
+122–140, two sessions, 23 polls, **138 `logger_debug` lines** — six
+spies, one per major, the whole board rather than the one spy the
+section asked for.
+
+**No poll ever caught an assigned spy without a position.** `x` is
+absent from 13 of the 138 lines, and every one of the 13 is
+`state == "unassigned"`: the six spies at the turn-123 baseline before
+any of them was posted, and the player's own spy for the seven turns it
+sat in hand. Not one line carries a positioned state with no `x`, and
+no spy ever goes from a city back to `unassigned` either. So
+`ExtractSpyFromCity` and the assignment of the destination are not
+separable by a once-per-turn poll — the poll after a move order already
+reads the spy as `travelling` to Y.
+
+**Every reassignment was announced.** Twenty-six city changes across the
+six spies and both sessions, and every single one emitted `spy_moved` on
+the arrival turn, plus the five `counter_intel` transitions Run A
+already described. The reassignment the run was built around: the
+player's spy posted to Lhasa on 131, surveillance established on 135,
+the move order to Sarai Batu issued that same turn, and the turn-136
+poll reading `travelling` / Sarai Batu / `x = 22` with `spy_moved`
+written.
+
+**The second question answers itself in the code, and the answer is no.**
+`moved()` is `spy.x ~= nil and (known.x ~= spy.x or known.y ~= spy.y)`.
+A `known` overwritten with a positionless record compares `nil ~= 22`,
+which is **true** — so the arrival still fires. The extraction poll's
+own silence is correct, because at that poll there is no posting to
+announce. The fix this section held in reserve — compare against the
+last *positioned* `known` — would change nothing.
+
+**Defect 2 therefore closes with no further change**, and india-diplo's
+lost postings are fully accounted for without it. Of the eleven spies
+there first located by a `spy_mission_completed`, six carry
+`spy_revived` on or one turn before the posting the +4 artifact dates —
+the revival early-return, fixed in `b51a639` — and five carry an
+unlocated `spy_created` on the posting turn itself, fixed in the same
+bundle. The one re-posting, `ENGLAND_6` from Amsterdam to Osininka with
+no move between, dates to turn 164, and turn 164 is the first poll of
+the session that resumed at 163. It is the seam, not the extraction.
+
+**What this run does move is the seam, which it caught twice.** The
+second run is the case outright: save-R reloaded at turn 134, the same
+order issued, and the arrival at Sarai Batu landing on the session's
+first poll. The turn-135 debug line shows the poller holding the new
+posting; nothing was written, because the first poll of a session only
+rebaselines. The `spy_surveillance_established` that follows on 139 is
+the only trace the reassignment leaves — the same shape as Jerusalem's
+`GREECE_4` in Run A. For the same reason two sessions and six spies
+produced **zero** `spy_created` records. That is the concrete case the
+"Sessions" item in `planned-changes.md` was waiting for, and the last
+open espionage item.
+
+**Surveillance is +4 again**, in a second game: all six postings with a
+`spy_moved` to date them establish surveillance exactly four turns
+later, and the seventh — the one lost in the seam — is dated to turn 135
+by its debug lines and lands on 139. Still nobody at Familiar+ influence,
+so the 1-turn branch stays unexercised.
+
+Of the three fixes the branch was rebased onto, only the spy `agent` id
+is exercised: it is on every spy record in the log. The window holds no
+World Congress at all, so the guarded proposer and the dropped
+`congress_founded` are still unsighted in a live game — `espionage-test.jsonl`
+covers the founding, and nothing yet covers a proposal with no proposer.
+
+With both questions answered, branch `run-b-instrumentation` has done
+its job and can be deleted.
