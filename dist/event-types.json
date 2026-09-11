@@ -59,6 +59,7 @@
   "session_started",
   "snapshot",
   "spy_created",
+  "spy_evicted",
   "spy_killed",
   "spy_mission_completed",
   "spy_moved",

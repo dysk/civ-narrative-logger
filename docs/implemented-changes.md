@@ -835,3 +835,37 @@ order, so both lists are sorted by id and written as arrays. A league
 with nothing before it is most turns of the game, so an empty list is
 left out of the record entirely, the way `city_state_snapshot` leaves out
 empty relations.
+
+## Say when a spy is thrown out of a city it was watching
+
+A city that changes hands or is razed throws out every major's spy that
+sat in it, the captor's own included. `CvPlayer::acquireCity` walks
+`m_aiSpyAssignment` and calls `ExtractSpyFromCity` on each
+(`CvPlayer.cpp:2775-2829`), `CvCity::kill` does the same before deleting
+the city (`CvCity.cpp:2069-2073`), and the extraction empties the
+position, drops the spy to `SPY_STATE_UNASSIGNED` and turns its city
+vision back off (`CvEspionageClasses.cpp:1449`). The game tells the
+owner with `NOTIFICATION_SPY_EVICTED`; the log said nothing at all.
+
+No existing branch could see it. `moved()` requires a destination and an
+evicted spy has none, `becameCounterspy()` requires a city, `completed()`
+requires a progress figure and an unassigned spy answers -1, and
+`spy_surveillance_established` only fires on false → true. So the
+posting simply stopped being mentioned, and to a reader that is
+indistinguishable from a spy still sitting there watching - the analyst
+would have carried the tenure on to the end of the log.
+
+`spy_evicted` carries the city the spy held on the last poll, the way
+`spy_killed` does, since the position is already gone by the time the
+poll sees it. One branch covers every path into unassigned at once:
+conquest, razing, liberation and a city handed over in a deal.
+
+A spy re-posted into the same city on the turn it was thrown out is
+still silent, because the poll sees one position and the same one. That
+is a human's move, not an AI's, and the analyst has the second signal
+for it - the city's owner changed between two sightings.
+
+No log carries an instance yet: in all five example games no city
+changed hands while a spy was in it, the nearest miss being England's
+spy leaving Onondaga on turn 117 of `india-diplo.jsonl`, 35 turns before
+India took it.

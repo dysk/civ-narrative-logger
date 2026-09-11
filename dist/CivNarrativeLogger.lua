@@ -2684,6 +2684,21 @@ local function becameCounterspy(known, spy)
     and spy.city ~= nil
 end
 
+-- A city that changes hands or is razed throws out every major's spy,
+-- the captor's own included: acquireCity and CvCity::kill both call
+-- ExtractSpyFromCity, which empties the position, drops the spy to
+-- unassigned and turns its city vision off (CvPlayer.cpp:2775-2829,
+-- CvCity.cpp:2069-2073, CvEspionageClasses.cpp:1449). No other branch
+-- can see it - the move check needs a destination and an unassigned spy
+-- answers -1 for progress - so the posting would otherwise stop being
+-- mentioned and read as a spy still watching.
+--
+-- A spy re-posted into the same city on the turn it was thrown out is
+-- still silent, because the poll sees one position and the same one.
+local function evicted(known, spy)
+  return known.x ~= nil and spy.x == nil
+end
+
 -- A finished mission neither moves the spy nor changes its state: the
 -- DLL resets the progress and sets the same activity going again
 -- (CvEspionageClasses.cpp:807-810 for a stolen tech, :900-903 for a
@@ -2720,7 +2735,9 @@ local function diffSpy(sink, turn, known, spy)
   if known.rank ~= spy.rank then
     sink(json.encode(record("spy_promoted", turn, spy, { rank = spy.rank })))
   end
-  if moved(known, spy) or becameCounterspy(known, spy) then
+  if evicted(known, spy) then
+    sink(json.encode(record("spy_evicted", turn, spy, at(known))))
+  elseif moved(known, spy) or becameCounterspy(known, spy) then
     sink(json.encode(record("spy_moved", turn, spy, posting(spy))))
   elseif completed(known, spy) then
     sink(json.encode(record("spy_mission_completed", turn, spy, completion(spy))))

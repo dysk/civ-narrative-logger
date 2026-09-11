@@ -171,6 +171,32 @@ t.test("emits spy_killed with the city from the last live poll", function()
   }))
 end)
 
+-- A city that changes hands or is razed throws every major's spy out of
+-- it, the captor's own included (CvPlayer.cpp:2775-2829,
+-- CvCity.cpp:2069-2073). ExtractSpyFromCity empties the position and
+-- leaves the spy unassigned, and nothing else in the diff can see that:
+-- the move check needs a destination and an unassigned spy answers -1
+-- for progress. Without this the posting simply stops being mentioned
+-- and a reader goes on believing the spy is still watching.
+t.test("emits spy_evicted when a spy loses the city it was posted in", function()
+  t.assert_deep_equal({
+    '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_evicted",'
+      .. '"spy":"Alexis","turn":11}',
+  }, changesAfter({
+    { turn = 10, spies = { ["0:0"] = spy({ city = "Antium", city_civ = "Rome" }) } },
+    { turn = 11, spies = { ["0:0"] = unassignedSpy() } },
+  }))
+end)
+
+-- A spy is unassigned from the moment it is granted until it is sent
+-- somewhere, which is most of a careful player's game.
+t.test("says nothing about a spy that was never posted anywhere", function()
+  t.assert_deep_equal({}, changesAfter({
+    { turn = 10, spies = { ["0:0"] = unassignedSpy() } },
+    { turn = 11, spies = { ["0:0"] = unassignedSpy() } },
+  }))
+end)
+
 -- A killed spy comes back under a new name at the same agent id
 -- (CvEspionageClasses.cpp:930-936), so without this the log would show
 -- one agent silently renamed.
