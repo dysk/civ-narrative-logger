@@ -11,11 +11,11 @@
 -- surveillance goes true: from then on the spy's owner can see the city.
 --
 -- A session that resumes a game already under way has nothing to diff
--- against, so its first poll announces every spy it can see as a located
--- spy_created. Anything else swallows whatever was created or posted
--- inside the reload seam: two sessions of Run B produced none at all.
--- The agent id is stable for the whole game, so the analyst deduplicates
--- a spy it has already been told about.
+-- against, so its first poll announces every spy it can see as a
+-- spy_created carrying the city and the state. Anything else swallows
+-- whatever was created or posted inside the reload seam: two sessions of
+-- Run B produced none at all. The agent id is stable for the whole game,
+-- so the analyst deduplicates a spy it has already been told about.
 --
 -- Registered on PlayerDoTurn like the other stateful pollers and gated
 -- on the turn: the whole board is read at once while PlayerDoTurn fires
@@ -55,7 +55,7 @@ local function posting(spy)
            x = spy.x, y = spy.y, state = spy.state }
 end
 
-local function completion(spy)
+local function activity(spy)
   return { city = spy.city, city_civ = spy.city_civ, state = spy.state }
 end
 
@@ -129,11 +129,22 @@ local function diffSpy(sink, turn, known, spy)
   elseif moved(known, spy) or becameCounterspy(known, spy) then
     sink(json.encode(record("spy_moved", turn, spy, posting(spy))))
   elseif completed(known, spy) then
-    sink(json.encode(record("spy_mission_completed", turn, spy, completion(spy))))
+    sink(json.encode(record("spy_mission_completed", turn, spy, activity(spy))))
   end
   if not known.surveillance and spy.surveillance then
     sink(json.encode(record("spy_surveillance_established", turn, spy, at(spy))))
   end
+end
+
+-- A spy first polled while already posted gets no other record for that
+-- posting, so the creation carries what a posting would have said. The
+-- state is what makes a settled counterspy legible: its transition into
+-- counter_intel happened before the poller existed and will never happen
+-- again, so without it that garrison is a spy sitting in a city for no
+-- stated reason. A spy nobody has posted yet is unassigned by definition
+-- and says nothing.
+local function firstSighting(spy)
+  return spy.city and activity(spy) or nil
 end
 
 local function diff(sink, turn, known, spies)
@@ -141,7 +152,7 @@ local function diff(sink, turn, known, spies)
     if known[key] then
       diffSpy(sink, turn, known[key], spies[key])
     else
-      sink(json.encode(record("spy_created", turn, spies[key], at(spies[key]))))
+      sink(json.encode(record("spy_created", turn, spies[key], firstSighting(spies[key]))))
     end
   end
 end

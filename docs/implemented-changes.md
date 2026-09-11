@@ -869,3 +869,24 @@ No log carries an instance yet: in all five example games no city
 changed hands while a spy was in it, the nearest miss being England's
 spy leaving Onondaga on turn 117 of `india-diplo.jsonl`, 35 turns before
 India took it.
+
+## Say what a spy first seen in a city is doing there
+
+`spy_created` carried the city and nothing else, so the one record a
+reload seam gives a posting did not say what the posting was for. That
+loses counter-intelligence specifically. The transition into
+`counter_intel` is what makes a garrison legible, it happens once, and a
+counterspy that settled in before the session started has already made
+it - the next poll diffs `counter_intel` against `counter_intel` and
+`becameCounterspy()` stays false forever. The garrison then reads as a
+spy sitting in a city for no stated reason, which is also what a spy
+merely travelling through its own territory looks like.
+
+`espionage-test.jsonl` has the near miss on turn 151: Mysore's
+`MC_MUGHAL_0` is announced in Mysuru with no state, and the garrison is
+only visible because the player re-ordered it on 152 and the transition
+fired after all.
+
+The creation now carries `state` alongside the city. A spy nobody has
+posted yet says nothing - it is unassigned by definition, and the eight
+records the Renaissance grant produces gain nothing from repeating it.

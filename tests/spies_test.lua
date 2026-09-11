@@ -81,7 +81,7 @@ end)
 t.test("emits spy_created with the city when the spy is first seen posted", function()
   t.assert_deep_equal({
     '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_created",'
-      .. '"spy":"Alexis","turn":11}',
+      .. '"spy":"Alexis","state":"gathering_intel","turn":11}',
   }, pollThrough({
     { turn = 10, spies = {} },
     { turn = 11, spies = { ["0:0"] = spy({ city = "Antium", city_civ = "Rome" }) } },
@@ -96,9 +96,23 @@ end)
 t.test("the first poll announces every spy it can already see", function()
   t.assert_deep_equal({
     '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_created",'
-      .. '"spy":"Alexis","turn":10}',
+      .. '"spy":"Alexis","state":"gathering_intel","turn":10}',
   }, pollThrough({
     { turn = 10, spies = { ["0:0"] = spy() } },
+  }))
+end)
+
+-- A counterspy that settled in before the reload has nothing left to
+-- change, so the transition into counter_intel already happened and the
+-- creation is the only record that garrison will ever get. The state is
+-- what separates it from a spy merely passing through its own territory.
+t.test("a spy first seen already posted says what it is doing there", function()
+  t.assert_deep_equal({
+    '{"agent":0,"city":"Krakow","city_civ":"Poland","civ":"Poland","event":"spy_created",'
+      .. '"spy":"Alexis","state":"counter_intel","turn":10}',
+  }, pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy({ city = "Krakow", city_civ = "Poland",
+        state = "counter_intel" }) } },
   }))
 end)
 
