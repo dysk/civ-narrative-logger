@@ -316,6 +316,73 @@ t.test("an active resolution that disappears has been repealed", function()
   t.assert_match('"resolution":"RESOLUTION_EMBARGO"', lines[2])
 end)
 
+-- A vote raised and decided entirely inside a reload seam was never in
+-- a snapshot the resuming poller holds, so no diff can report it. The
+-- proposals, the resolutions they act on and the projects an enactment
+-- starts are what the outcome is read from, so the snapshot carries all
+-- three and the analyst can settle the vote the poller could not see.
+t.test("the snapshot carries the proposals in flight", function()
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({ host = "Poland", proposals = {
+    [7] = { id = 7, type = "RESOLUTION_WORLD_RELIGION", proposer = "Rome",
+      repeal = false, ongoing_effects = true },
+  } })
+  local lines, sink = captureSink()
+  congress.new(civ, sink)(0)
+  t.assert_match('"proposals":[{"id":7,"ongoing_effects":true,"proposer":"Rome",'
+    .. '"repeal":false,"type":"RESOLUTION_WORLD_RELIGION"}]', lines[1])
+end)
+
+t.test("the snapshot carries the active resolutions and the league projects", function()
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({
+    host = "Poland",
+    active_resolutions = { [3] = { id = 3, type = "RESOLUTION_EMBARGO" } },
+    projects = { LEAGUE_PROJECT_WORLD_FAIR = { active = true, complete = false } },
+  })
+  local lines, sink = captureSink()
+  congress.new(civ, sink)(0)
+  t.assert_match('"active_resolutions":[{"id":3,"type":"RESOLUTION_EMBARGO"}]', lines[1])
+  t.assert_match('"projects":{"LEAGUE_PROJECT_WORLD_FAIR":'
+    .. '{"active":true,"complete":false}}', lines[1])
+end)
+
+-- Both lists are keyed by id, and pairs() hands them out in whatever
+-- order it likes.
+t.test("proposals come out ordered by id", function()
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({ host = "Poland", proposals = {
+    [9] = { id = 9, type = "RESOLUTION_SCHOLARS", repeal = false },
+    [2] = { id = 2, type = "RESOLUTION_EMBARGO", repeal = true },
+  } })
+  local lines, sink = captureSink()
+  congress.new(civ, sink)(0)
+  t.assert_match('"proposals":[{"id":2,"repeal":true,"type":"RESOLUTION_EMBARGO"},'
+    .. '{"id":9,"repeal":false,"type":"RESOLUTION_SCHOLARS"}]', lines[1])
+end)
+
+-- A league with nothing before it is the common case; an empty list on
+-- every one of those turns is weight the record does not need.
+t.test("a league with nothing in flight carries no lists at all", function()
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({ host = "Poland" })
+  local lines, sink = captureSink()
+  congress.new(civ, sink)(0)
+  t.assert_equal(nil, lines[1]:find("proposals", 1, true))
+  t.assert_equal(nil, lines[1]:find("active_resolutions", 1, true))
+  t.assert_equal(nil, lines[1]:find("projects", 1, true))
+end)
+
+-- united_nations_formed is a diff, and a diff is exactly what a resuming
+-- session skips. The flag on the record survives the seam.
+t.test("the snapshot says whether the league is the United Nations", function()
+  local civ, state = fakeCiv()
+  state.snapshot = snapshot({ host = "Poland", united_nations = true })
+  local lines, sink = captureSink()
+  congress.new(civ, sink)(0)
+  t.assert_match('"united_nations":true', lines[1])
+end)
+
 t.test("a poll error is logged instead of raised", function()
   local lines, sink = captureSink()
   local civ = {

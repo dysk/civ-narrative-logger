@@ -99,6 +99,23 @@ local function diff(sink, turn, known, snapshot)
   diffRepealed(sink, turn, known.active_resolutions, snapshot.active_resolutions)
 end
 
+-- Both lists are keyed by the league's own ids, which pairs() hands out
+-- in whatever order it likes.
+local function byId(t)
+  local ids = {}
+  for id in pairs(t) do table.insert(ids, id) end
+  table.sort(ids)
+  local list = {}
+  for _, id in ipairs(ids) do table.insert(list, t[id]) end
+  return list
+end
+
+-- A league with nothing before it is most turns of the game, so an empty
+-- list is weight the record does not need.
+local function nonEmpty(t)
+  return next(t) ~= nil and t or nil
+end
+
 function M.new(civ, sink)
   local state = { turn = nil, snapshot = nil }
 
@@ -117,6 +134,12 @@ function M.new(civ, sink)
     -- cannot tell a league just founded from one it is meeting again
     -- after a reload. It announces neither: the snapshot below already
     -- says the league exists and who hosts it.
+    --
+    -- That snapshot is also what a resuming session diffs nothing over.
+    -- It carries the proposals in flight, the resolutions they act on
+    -- and the projects an enactment starts, so a vote raised and decided
+    -- inside a reload seam - the one thing congressSnapshot cannot
+    -- recover live - can still be settled by the analyst.
     if state.snapshot then diff(sink, turn, state.snapshot, snapshot) end
 
     sink(json.encode({
@@ -125,6 +148,10 @@ function M.new(civ, sink)
       host = snapshot.host,
       delegates = snapshot.delegates,
       votes_needed_for_diplo_victory = snapshot.votes_needed_for_diplo_victory,
+      united_nations = snapshot.united_nations,
+      proposals = nonEmpty(byId(snapshot.proposals)),
+      active_resolutions = nonEmpty(byId(snapshot.active_resolutions)),
+      projects = nonEmpty(snapshot.projects),
     }))
 
     state.snapshot = snapshot
