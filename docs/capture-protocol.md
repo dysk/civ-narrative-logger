@@ -406,4 +406,7 @@ World Congress at all, so the guarded proposer and the dropped
 covers the founding, and nothing yet covers a proposal with no proposer.
 
 With both questions answered, branch `run-b-instrumentation` has done
-its job and can be deleted.
+its job and the local copy is gone. The commit is still
+`origin/run-b-instrumentation` (`9768f63`) if the per-poll lines are ever
+wanted again — `git checkout origin/run-b-instrumentation` and step 0
+still applies.
