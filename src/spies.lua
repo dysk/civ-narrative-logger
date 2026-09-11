@@ -10,7 +10,12 @@
 -- and the cycle is not. The one turn in the cycle worth a record is when
 -- surveillance goes true: from then on the spy's owner can see the city.
 --
--- The first poll of a session is only a baseline.
+-- A session that resumes a game already under way has nothing to diff
+-- against, so its first poll announces every spy it can see as a located
+-- spy_created. Anything else swallows whatever was created or posted
+-- inside the reload seam: two sessions of Run B produced none at all.
+-- The agent id is stable for the whole game, so the analyst deduplicates
+-- a spy it has already been told about.
 --
 -- Registered on PlayerDoTurn like the other stateful pollers and gated
 -- on the turn: the whole board is read at once while PlayerDoTurn fires
@@ -133,7 +138,7 @@ function M.new(civ, sink)
     state.turn = turn
 
     local spies = civ.spies()
-    if state.spies then diff(sink, turn, state.spies, spies) end
+    diff(sink, turn, state.spies or {}, spies)
     state.spies = spies
   end
 

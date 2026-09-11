@@ -47,6 +47,14 @@ local function pollThrough(states)
   return lines
 end
 
+-- The opening baseline is one spy_created per spy already in place;
+-- this is what the poller wrote after it.
+local function changesAfter(states)
+  local lines = pollThrough(states)
+  for _ in pairs(states[1].spies) do table.remove(lines, 1) end
+  return lines
+end
+
 -- Nothing exists before somebody reaches the Renaissance, so the poll is
 -- an empty list against an empty list for most of the game.
 t.test("logs nothing while nobody has a spy", function()
@@ -80,9 +88,24 @@ t.test("emits spy_created with the city when the spy is first seen posted", func
   }))
 end)
 
-t.test("logs nothing on the first poll, which is only a baseline", function()
-  t.assert_deep_equal({}, pollThrough({
+-- A session that resumes a game already under way has nothing to diff
+-- against, and every spy it can see was created, and posted, inside the
+-- reload seam. So the first poll announces them all rather than swallow
+-- them: the record carries the agent id, which is stable for the whole
+-- game, so the analyst drops the ones it has already seen.
+t.test("the first poll announces every spy it can already see", function()
+  t.assert_deep_equal({
+    '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_created",'
+      .. '"spy":"Alexis","turn":10}',
+  }, pollThrough({
     { turn = 10, spies = { ["0:0"] = spy() } },
+  }))
+end)
+
+t.test("a spy the first poll announced is not announced again", function()
+  t.assert_equal(1, #pollThrough({
+    { turn = 10, spies = { ["0:0"] = spy() } },
+    { turn = 11, spies = { ["0:0"] = spy() } },
   }))
 end)
 
@@ -92,7 +115,7 @@ t.test("emits spy_moved with the city it was sent to and whose it is", function(
   t.assert_deep_equal({
     '{"agent":0,"city":"Warsaw","city_civ":"Poland","civ":"Poland","event":"spy_moved",'
       .. '"spy":"Alexis","state":"counter_intel","turn":11,"x":10,"y":20}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy() } },
     { turn = 11, spies = { ["0:0"] = spy({ city = "Warsaw", city_civ = "Poland",
         x = 10, y = 20, state = "counter_intel" }) } },
@@ -106,7 +129,7 @@ t.test("emits spy_moved when a spy turns to counter-intelligence in place", func
   t.assert_deep_equal({
     '{"agent":0,"city":"Warsaw","city_civ":"Poland","civ":"Poland","event":"spy_moved",'
       .. '"spy":"Alexis","state":"counter_intel","turn":11,"x":40,"y":3}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "travelling",
         city = "Warsaw", city_civ = "Poland" }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "counter_intel",
@@ -117,7 +140,7 @@ end)
 -- The transition is the posting only the first time; a counterspy left
 -- in place must not re-announce itself every poll.
 t.test("does not repeat spy_moved while a counterspy sits still", function()
-  t.assert_deep_equal({}, pollThrough({
+  t.assert_deep_equal({}, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "counter_intel",
         city = "Warsaw", city_civ = "Poland" }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "counter_intel",
@@ -128,7 +151,7 @@ end)
 t.test("emits spy_promoted when the rank goes up", function()
   t.assert_deep_equal({
     '{"agent":0,"civ":"Poland","event":"spy_promoted","rank":"agent","spy":"Alexis","turn":11}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy() } },
     { turn = 11, spies = { ["0:0"] = spy({ rank = "agent" }) } },
   }))
@@ -141,7 +164,7 @@ t.test("emits spy_killed with the city from the last live poll", function()
   t.assert_deep_equal({
     '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland","event":"spy_killed",'
       .. '"spy":"Alexis","turn":11}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ city = "Antium", city_civ = "Rome" }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "dead", city = nil,
         city_civ = nil }) } },
@@ -154,7 +177,7 @@ end)
 t.test("emits spy_revived when a dead spy returns under a new name", function()
   t.assert_deep_equal({
     '{"agent":0,"civ":"Poland","event":"spy_revived","spy":"Claudette","turn":11}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "dead" }) } },
     { turn = 11, spies = { ["0:0"] = unassignedSpy({ spy = "Claudette" }) } },
   }))
@@ -165,7 +188,7 @@ end)
 -- The agent id runs through the death unchanged, so the two records
 -- either side of it can still be recognised as one spy.
 t.test("a death and the revival after it carry the same agent id", function()
-  local lines = pollThrough({
+  local lines = changesAfter({
     { turn = 10, spies = { ["0:5"] = spy({ agent = 5 }) } },
     { turn = 11, spies = { ["0:5"] = spy({ agent = 5, state = "dead",
         city = NONE, city_civ = NONE }) } },
@@ -187,7 +210,7 @@ t.test("emits the posting when a spy revives already in a city", function()
     '{"agent":0,"civ":"Poland","event":"spy_revived","spy":"Claudette","turn":11}',
     '{"agent":0,"city":"Kyoto","city_civ":"Japan","civ":"Poland","event":"spy_moved",'
       .. '"spy":"Claudette","state":"travelling","turn":11,"x":5,"y":9}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "dead" }) } },
     { turn = 11, spies = { ["0:0"] = unassignedSpy({ spy = "Claudette",
         state = "travelling", city = "Kyoto", city_civ = "Japan",
@@ -204,14 +227,14 @@ t.test("emits spy_mission_completed when progress resets in place", function()
     '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland",'
       .. '"event":"spy_mission_completed","spy":"Alexis",'
       .. '"state":"gathering_intel","turn":11}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ progress = 96 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ progress = 4 }) } },
   }))
 end)
 
 t.test("a rigged election completes the same way an intel theft does", function()
-  t.assert_match('"state":"rigging_election"', pollThrough({
+  t.assert_match('"state":"rigging_election"', changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "rigging_election", progress = 90 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "rigging_election", progress = 0 }) } },
   })[1])
@@ -221,14 +244,14 @@ end)
 -- counter and each state starts it at zero, so a state transition drops
 -- progress in place without a mission having finished.
 t.test("progress falling at a state transition is not a completed mission", function()
-  t.assert_deep_equal({}, pollThrough({
+  t.assert_deep_equal({}, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ state = "surveillance", progress = 88 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ state = "gathering_intel", progress = 0 }) } },
   }))
 end)
 
 t.test("climbing progress is not a completed mission", function()
-  t.assert_deep_equal({}, pollThrough({
+  t.assert_deep_equal({}, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ progress = 40 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ progress = 55 }) } },
   }))
@@ -240,7 +263,7 @@ t.test("progress falling because the spy moved is not a completed mission", func
   t.assert_deep_equal({
     '{"agent":0,"city":"Warsaw","city_civ":"Poland","civ":"Poland","event":"spy_moved",'
       .. '"spy":"Alexis","state":"gathering_intel","turn":11,"x":10,"y":20}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ progress = 96 }) } },
     { turn = 11, spies = { ["0:0"] = spy({ city = "Warsaw", city_civ = "Poland",
         x = 10, y = 20, progress = 0 }) } },
@@ -278,14 +301,14 @@ t.test("emits spy_surveillance_established when surveillance goes up in place", 
   t.assert_deep_equal({
     '{"agent":0,"city":"Antium","city_civ":"Rome","civ":"Poland",'
       .. '"event":"spy_surveillance_established","spy":"Alexis","turn":11}',
-  }, pollThrough({
+  }, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ surveillance = false }) } },
     { turn = 11, spies = { ["0:0"] = spy({ surveillance = true }) } },
   }))
 end)
 
 t.test("surveillance dropping to false is not an event", function()
-  t.assert_deep_equal({}, pollThrough({
+  t.assert_deep_equal({}, changesAfter({
     { turn = 10, spies = { ["0:0"] = spy({ surveillance = true }) } },
     { turn = 11, spies = { ["0:0"] = spy({ surveillance = false }) } },
   }))
